@@ -71,7 +71,10 @@ export function plan(tl, opts = {}) {
   const ar = ratio(opts.aspect);
   const cam = camSettings(tl, opts.cam);
   const wideW = Math.min(W, (H * ar[0]) / ar[1]);
-  const wide = clampCam({ cx: W / 2, cy: H / 2, w: W }, W, H, ar);
+  // The overview: the whole window, or for a narrower cut (9:16, 1:1) the widest view centered on where the action is.
+  const boxes = (tl.events ?? tl.marks).filter((e) => !e.skipped && (e.region ?? e.box)).map((e) => e.region ?? e.box);
+  const ax = boxes.length ? (Math.min(...boxes.map((b) => b.x)) + Math.max(...boxes.map((b) => b.x + b.w))) / 2 : W / 2;
+  const wide = clampCam({ cx: ax, cy: H / 2, w: W }, W, H, ar);
   const keys = [{ t: 0, ...wide }];
   const pos = (k) => ({ cx: k.cx, cy: k.cy, w: k.w });
   // Code-shot timelines keep the original planner's quirk: `{ t: tStart, ...prev }` let prev.t win, so the camera

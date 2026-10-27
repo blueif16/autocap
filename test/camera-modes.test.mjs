@@ -103,3 +103,9 @@ test("feel snappy reaches the target sooner than gentle", () => {
   };
   assert.ok(gap("snappy") < gap("gentle"), `snappy ${gap("snappy")} vs gentle ${gap("gentle")}`);
 });
+
+test("in a vertical cut the overview centers on where the action is", () => {
+  const left = { x: 80, y: 300, w: 200, h: 40 }, left2 = { x: 300, y: 500, w: 120, h: 40 };
+  const p = path(tl([click(1000, left), click(2000, left2)], { auto: "off" }), { aspect: 9 / 16 });
+  for (const [ms, b] of [[1000, left], [2000, left2]]) assert.ok(inside(center(b), rect(at(p, ms), 9 / 16)), `target at ${ms} ms is in the vertical overview`);
+});
