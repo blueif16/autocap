@@ -1,0 +1,32 @@
+<!doctype html><html><head><title>steps</title></head><body style="margin:0;font:16px system-ui;height:2400px">
+<button id="inc" style="position:absolute;left:100px;top:100px;width:100px;height:40px">Add one</button><span id="count" style="position:absolute;left:220px;top:110px">0</span>
+<div id="hov" style="position:absolute;left:300px;top:100px;width:120px;height:40px;background:#ddd">Hover me</div><span id="hovd" style="position:absolute;left:440px;top:110px"></span>
+<label for="name" style="position:absolute;left:40px;top:205px">Name</label><input id="name" style="position:absolute;left:100px;top:200px;width:200px;height:30px;box-sizing:border-box">
+<form id="f"><input id="q" placeholder="Search" style="position:absolute;left:400px;top:200px;width:200px;height:30px"></form><span id="submitted" style="position:absolute;left:620px;top:205px"></span>
+<select id="sel" style="position:absolute;left:100px;top:300px"><option>one</option><option>two</option></select>
+<div id="src" style="position:absolute;left:100px;top:400px;width:60px;height:60px;background:#f80">drag</div>
+<div id="dst" style="position:absolute;left:400px;top:400px;width:120px;height:120px;background:#8f8">drop</div><span id="dropped" style="position:absolute;left:540px;top:400px"></span>
+<button style="position:absolute;left:600px;top:100px">Dup</button><button style="position:absolute;left:700px;top:100px">Dup</button>
+<div id="far" style="position:absolute;left:100px;top:2000px;width:200px;height:50px;background:#88f">Far below</div>
+<span id="live" style="position:absolute;left:900px;top:110px"></span>
+<script>
+let n = 0; inc.onclick = () => (count.textContent = ++n);
+hov.onmouseenter = () => (hovd.textContent = "hovered");
+f.onsubmit = (e) => { e.preventDefault(); submitted.textContent = q.value; };
+let dragging = false;
+src.onmousedown = () => (dragging = true);
+addEventListener("mouseup", (e) => {
+  if (!dragging) return;
+  dragging = false;
+  const r = dst.getBoundingClientRect();
+  if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) dropped.textContent = "yes";
+});
+setTimeout(() => {
+  const d = document.createElement("div");
+  d.id = "late"; d.textContent = "Arrived";
+  d.style.cssText = "position:absolute;left:800px;top:300px;width:150px;height:60px;background:#fc0";
+  document.body.appendChild(d);
+}, 400);
+const es = new EventSource("/stream");
+es.addEventListener("note", (e) => (live.textContent = JSON.parse(e.data).text));
+</script></body></html>
