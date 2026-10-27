@@ -24,7 +24,7 @@ function parse(argv) {
 async function usage() {
   const lines = [];
   for (const c of COMMANDS) lines.push("  " + (await import(`../src/commands/${c}.mjs`)).usage);
-  return `rec <command> … [--json] [--config <file>]\n${lines.join("\n")}\nExit: 0 ok · 1 a shot or check failed · 2 setup or usage · 3 bad config or shot. Start with: rec guide`;
+  return `rec <command> … [--json] [--config <file>]\n${lines.join("\n")}\nExit: 0 ok · 1 a shot or check failed · 2 setup or usage · 3 bad config or shot. Start with: rec skill (the procedure), then rec guide (the vocabulary)`;
 }
 
 async function main(argv) {

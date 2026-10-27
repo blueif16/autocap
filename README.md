@@ -14,30 +14,11 @@ agent. There is no MCP server: it is a CLI plus one skill. The CLI answers to `a
 
 ## For coding agents: start here
 
-If you were asked to use autocap on a project, this section and the skill are the whole procedure.
-
-1. **Install** in the project root: `npm i -D github:blueif16/autocap`. It needs Google Chrome, ffmpeg, and uv (or a
-   Python with Pillow).
-2. **Load the skill**: run `npx rec skill --install`, then read `~/.claude/skills/autocap/SKILL.md` in full
-   (`npx rec skill` prints it if you can't read that path). Follow it. `npx rec guide` lists the exact vocabulary.
-3. **Set up**:
-   - Run `npx rec doctor` and fix every ✗ with the `fix:` line it prints, until none are left.
-   - Run `npx rec init <the app's url>`, then start the app.
-4. **Work the loop, in order, producing each step's artifact before the next:**
-   1. Understand the codebase: a feature list with routes and files.
-   2. Game plan: 3–8 clip ideas.
-   3. Story plan: the beats, camera and aspect for each clip.
-   4. Write: one shot file per clip in `rec/shots/`.
-   5. Find the pages: `npx rec scan` for a context sheet, then `npx rec check` until every shot passes.
-   6. Record: `npx rec take`, then `npx rec look` until `ok: true`, then `npx rec cut --as vertical,gif`.
-5. **You are done when all of these hold:**
-   - every shot passes `check`;
-   - every take's `npx rec look <id> --json` has `ok: true`, and you have read its `look.png`;
-   - `capturedFps` is at least 60 for every clip in `<out>/manifest.json`.
-6. **Report:**
-   - For each clip: its id, what it demonstrates, its beats, and the paths of `smart.mp4` and any variants.
-   - If an autocap command failed or behaved unclearly, list the command, its `--json` output and the `rec doctor`
-     output. This feedback shapes the next version.
+1. Install in the project root: `npm i -D github:blueif16/autocap` (needs Google Chrome, ffmpeg, and uv or a Python
+   with Pillow).
+2. Run `npx rec skill` and follow it. It is the whole procedure, from reading the app to the done bar and the report.
+   `npx rec skill --install` keeps it for future sessions.
+3. `npx rec guide` lists the vocabulary by topic; `npx rec <command> --help` shows one command.
 
 Every command takes `--json`. Exit codes: 0 ok · 1 a shot or check failed · 2 setup or usage · 3 bad config or shot.
 
