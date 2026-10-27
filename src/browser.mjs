@@ -58,10 +58,10 @@ export function recorder(cdp, { dir, clip, scale, alpha = false, quality = 93 })
   mkdirSync(dir, { recursive: true });
   const frames = [];
   const writes = [];
-  let running = true;
+  let running = true, failed = null; // a failed write (disk full) stops the loop; stop() reports it
   const t0 = performance.now();
   const loop = (async () => {
-    while (running) {
+    while (running && !failed) {
       const t = performance.now();
       const r = await cdp.send("Page.captureScreenshot", {
         format: alpha ? "png" : "jpeg",
@@ -71,7 +71,7 @@ export function recorder(cdp, { dir, clip, scale, alpha = false, quality = 93 })
       });
       const file = join(dir, `f${String(frames.length).padStart(5, "0")}.${alpha ? "png" : "jpg"}`);
       frames.push({ file, wall: (t + performance.now()) / 2 - t0 });
-      writes.push(writeFile(file, Buffer.from(r.data, "base64")));
+      writes.push(writeFile(file, Buffer.from(r.data, "base64")).catch((e) => { failed ??= e; }));
     }
   })();
   return {
@@ -82,6 +82,7 @@ export function recorder(cdp, { dir, clip, scale, alpha = false, quality = 93 })
       running = false;
       await loop;
       await Promise.all(writes);
+      if (failed) throw new Error(`cannot write frames to ${dir}: ${failed.message}`);
       return frames;
     },
   };
