@@ -3,6 +3,7 @@ import { existsSync, readFileSync, statfsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
+import { RecError } from "../config.mjs";
 
 export const usage = "doctor                    check this machine can record, with the fix for each problem";
 export const config = "optional";
@@ -89,8 +90,8 @@ function checkDisk(dir) {
 }
 function diskResult(free, at) {
   const detail = `${(free / GB).toFixed(1)} GB free at ${at}`;
-  const fix = "free disk space (a take writes 0.5-2 GB of frames temporarily): empty the trash, `docker system prune`, delete old rec-assets, or set `out` to a roomier drive";
-  if (free < 2 * GB) return bad("disk", "fail", `${detail}, need at least 2 GB`, fix);
+  const fix = "free disk space (a 5 s take writes 0.2-0.4 GB of frames temporarily): empty the trash, `docker system prune`, delete old rec-assets, or set `out` to a roomier drive";
+  if (free < GB) return bad("disk", "fail", `${detail}, need at least 1 GB`, fix);
   if (free < 5 * GB) return bad("disk", "warn", `${detail}, 5 GB or more is comfortable`, fix);
   return ok("disk", detail);
 }
@@ -129,6 +130,13 @@ function checkLock(out) {
   try { process.kill(pid, 0); alive = true; } catch (e) { alive = e.code === "EPERM"; }
   if (alive) return bad("lock", "warn", `another take is recording (pid ${pid})`, `wait for it to finish, or stop pid ${pid} if it is stuck`);
   return ok("lock", `stale lock (pid ${pid} is gone), will be taken over`);
+}
+
+/** What take needs before it records; any of these failing would waste the whole recording. Throws exit 2 with the fix. */
+export function preflight(cfg) {
+  for (const c of [checkFfmpeg(), checkRenderer(cfg), checkDisk(cfg.out)]) {
+    if (!c.ok && c.level === "fail") throw new RecError(2, `${c.name}: ${c.detail}`, c.fix);
+  }
 }
 
 export async function run({ cfg, flags }) {
