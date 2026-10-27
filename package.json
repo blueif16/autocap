@@ -8,6 +8,6 @@
   "exports": { ".": "./src/index.mjs" },
   "files": ["bin", "src"],
   "engines": { "node": ">=20" },
-  "scripts": { "test": "node --test test/*.test.mjs" },
+  "scripts": { "test": "node --test --test-concurrency=1 test/*.test.mjs" },
   "dependencies": { "playwright-core": "1.60" }
 }
