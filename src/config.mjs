@@ -6,12 +6,15 @@
 //   prepare({ page, shot })  app init scripts, run after the stage is installed and before the page loads
 //   console    regex: page console lines echoed during `rec check`
 //   python     interpreter with Pillow for the camera renderer   chrome  Chrome executable
-//   slowmo     slow-motion factor (default 3)      shots      [shot]
+//   slowmo     slow-motion factor (default 3)      shots      [shot], or a folder of shot files
+//   pages      paths `rec scan` puts on the context sheet (default ["/"])
 // A shot: { id, feature, title, demonstrates, act({ page, d }), setup?, routes?, stage?, focus?, lead?, tail?,
 //   pad?, posterAtMs?, suggestedUse?, staged? } and any app fields `prepare` reads.
-import { existsSync } from "node:fs";
-import { resolve, dirname } from "node:path";
+import { existsSync, readdirSync, statSync } from "node:fs";
+import { resolve, dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { validateSteps } from "./steps.mjs";
+import { CAM } from "./vocab.mjs";
 
 /** An error with the exit code rec should end with: 1 shot failed · 2 setup/usage · 3 bad config or shot. */
 export class RecError extends Error {
@@ -26,17 +29,30 @@ export async function loadConfig(file) {
   if (!existsSync(path)) throw new RecError(2, `no rec.config.mjs at ${path} (run rec in the app's folder or pass --config <file>)`);
   const c = (await import(pathToFileURL(path).href)).default ?? {};
   if (!c.url) throw new RecError(3, `${path}: url is required`);
-  const shots = c.shots ?? [];
+  const dir = dirname(path);
+  const shots = typeof c.shots === "string" ? await shotFolder(resolve(dir, c.shots)) : c.shots ?? [];
   const seen = new Set();
   for (const s of shots) {
     if (!s.id) throw new RecError(3, `a shot has no id (${s.title ?? "untitled"})`);
     if (seen.has(s.id)) throw new RecError(3, `duplicate shot id ${s.id}`);
     seen.add(s.id);
-    for (const k of ["feature", "title", "demonstrates"]) if (!s[k]) throw new RecError(3, `shot ${s.id} is missing ${k}`);
-    if (typeof s.act !== "function") throw new RecError(3, `shot ${s.id} is missing act({ page, d })`);
+    if (!s.title) throw new RecError(3, `shot ${s.id} is missing title`);
+    if (!!s.steps === (typeof s.act === "function")) throw new RecError(3, `shot ${s.id} needs exactly one of steps or act({ page, d })`);
+    s.feature ??= s.id.split(".")[0];
+    s.demonstrates ??= s.title;
+    try {
+      if (s.steps) validateSteps(s.steps, `shot ${s.id} `);
+      if (Array.isArray(s.setup)) validateSteps(s.setup, `shot ${s.id} setup `);
+    } catch (e) {
+      throw new RecError(3, e.message);
+    }
+    for (const [k, v] of Object.entries(s.cam ?? {})) {
+      const allowed = { auto: CAM.auto, feel: CAM.feel, end: CAM.end }[k];
+      if (allowed && !(v in allowed)) throw new RecError(3, `shot ${s.id}: cam.${k} "${v}" (valid: ${Object.keys(allowed).join(", ")})`);
+      if (!allowed && !["max", "pad"].includes(k)) throw new RecError(3, `shot ${s.id}: unknown cam setting ${k} (valid: ${Object.keys(CAM.shot).join(", ")})`);
+    }
     if (c.features && !c.features[s.feature]) throw new RecError(3, `shot ${s.id}: unknown feature ${s.feature}`);
   }
-  const dir = dirname(path);
   return {
     dir,
     file: path,
@@ -51,6 +67,27 @@ export async function loadConfig(file) {
     python: c.python && c.python.includes("/") ? resolve(dir, c.python) : c.python,
     chrome: c.chrome,
     slowmo: c.slowmo ?? 3,
+    pages: c.pages ?? ["/"],
     shots,
   };
+}
+
+/** Shots whose id starts with any prefix (all shots when no prefix). A prefix matching nothing is an error (exit 1). */
+export function pickShots(cfg, prefixes) {
+  if (!prefixes.length) return cfg.shots;
+  const pick = cfg.shots.filter((s) => prefixes.some((a) => s.id.startsWith(a)));
+  if (!pick.length) throw new RecError(1, `no shot matches ${prefixes.join(" ")}`);
+  return pick;
+}
+
+/** Every .mjs in the folder; each default-exports a shot or an array of shots. */
+async function shotFolder(folder) {
+  if (!existsSync(folder) || !statSync(folder).isDirectory()) throw new RecError(3, `shots folder ${folder} does not exist`);
+  const shots = [];
+  for (const f of readdirSync(folder).filter((f) => f.endsWith(".mjs")).sort()) {
+    const d = (await import(pathToFileURL(join(folder, f)).href)).default;
+    if (!d) throw new RecError(3, `${join(folder, f)} has no default export (a shot or an array of shots)`);
+    shots.push(...(Array.isArray(d) ? d : [d]));
+  }
+  return shots;
 }

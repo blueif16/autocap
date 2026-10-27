@@ -10,6 +10,7 @@ export class Director {
     this.pos = { ...start };
     this.cursor = [];
     this.marks = [];
+    this.events = []; // one per step of a steps shot (steps.mjs)
     this.clock = () => 0;
   }
   start(rec) {
@@ -20,8 +21,8 @@ export class Director {
     return new Promise((r) => setTimeout(r, ms / this.rate));
   }
   /** Names a moment; a box (CSS px) is what the smart camera frames. */
-  mark(what, box) {
-    this.marks.push({ atMs: Math.round(this.clock()), what, ...(box ? { box } : {}) });
+  mark(what, box, atMs = Math.round(this.clock())) {
+    this.marks.push({ atMs, what, ...(box ? { box } : {}) });
   }
   async place(x, y) {
     this.pos = { x, y };
@@ -53,6 +54,15 @@ export class Director {
     const b = await this.box(locator);
     await this.move(b.x + b.w * fx, b.y + b.h * fy, ms);
     return b;
+  }
+  /** Presses and releases at the cursor (twice for double). */
+  async press({ button = "left", double = false } = {}) {
+    this.cursor.push({ atMs: Math.round(this.clock()), x: Math.round(this.pos.x), y: Math.round(this.pos.y), down: true });
+    for (let n = 1; n <= (double ? 2 : 1); n++) {
+      await this.page.mouse.down({ button, clickCount: n });
+      await this.wait(90);
+      await this.page.mouse.up({ button, clickCount: n });
+    }
   }
   async click(locator, { ms = 450, fx = 0.5, fy = 0.5, dwell = 140, what } = {}) {
     const b = await this.hover(locator, { ms, fx, fy });

@@ -14,6 +14,20 @@ import { installStage } from "./stage.mjs";
 import { Director } from "./director.mjs";
 import { render as renderSmart } from "./camera.mjs";
 import { addToManifest, rel } from "./manifest.mjs";
+import { runSteps } from "./steps.mjs";
+
+// Hides dev chrome on every document the shot loads (a `goto` step loses styles added after load).
+const CSS = (css) => {
+  const add = () => { const s = document.createElement("style"); s.textContent = css; document.head.appendChild(s); };
+  document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", add) : add();
+};
+
+const ts = (ms) => new Date(Math.max(0, ms)).toISOString().slice(11, 23).replace(".", ",");
+/** captions.srt from the steps' `say` text: each caption runs until the next one (at most 3 s). */
+function srt(events, durationMs) {
+  const says = events.filter((e) => e.say);
+  return says.map((e, i) => `${i + 1}\n${ts(e.atMs)} --> ${ts(Math.min(says[i + 1]?.atMs ?? Infinity, e.atMs + 3000, durationMs))}\n${e.say}\n`).join("\n");
+}
 
 /** The smallest 16:9 box (≥ half the window) holding `b` plus padding, kept inside the window. */
 function frame16x9(b, W, H, pad = 110) {
@@ -66,10 +80,10 @@ export async function take(shot, cfg, { check = false } = {}) {
   if (check) return captureOnce(shot, cfg, rate, true);
   return withRecordLock(cfg.out, async () => {
     for (let attempt = 0; ; attempt++) {
-      const fps = await captureOnce(shot, cfg, rate, false);
-      if (fps >= 60 || attempt >= 1) return fps;
-      rate = Math.max(0.05, (rate * fps) / 100);
-      console.log(`  only ${fps} fps of page time; re-recording at ${rate.toFixed(3)}× page speed`);
+      const r = await captureOnce(shot, cfg, rate, false);
+      if (r.fps >= 60 || attempt >= 1) return r;
+      rate = Math.max(0.05, (rate * r.fps) / 100);
+      console.log(`  only ${r.fps} fps of page time; re-recording at ${rate.toFixed(3)}× page speed`);
     }
   });
 }
@@ -84,10 +98,9 @@ async function captureOnce(shot, cfg, rate, check) {
   try {
     return await captureIn(shot, cfg, s, rate, check);
   } catch (e) {
-    if (check) {
-      mkdirSync(join(cfg.out, ".debug"), { recursive: true });
-      await page.screenshot({ path: join(cfg.out, ".debug", `${shot.id}.png`) }).catch(() => {});
-    }
+    mkdirSync(join(cfg.out, ".debug"), { recursive: true });
+    const shotPath = join(cfg.out, ".debug", `${shot.id}.png`);
+    if (await page.screenshot({ path: shotPath }).then(() => true, () => false)) e.screenshot = shotPath;
     throw e;
   } finally {
     await browser.close().catch(() => {});
@@ -98,14 +111,19 @@ async function captureIn(shot, cfg, { page, cdp, browser }, rate, check) {
   const { width: W, height: H, dpr: DPR } = cfg.viewport;
   const stage = { ...cfg.stage, ...shot.stage };
   await installStage(page, stage);
+  await page.addInitScript(CSS, CLEAN_CSS + cfg.css);
   await cfg.prepare?.({ page, shot });
   if (shot.routes) await shot.routes(page);
-  await page.goto(cfg.url, { waitUntil: "load", timeout: 90000 }); // a dev server may be compiling
-  await page.addStyleTag({ content: CLEAN_CSS + cfg.css });
+  await page.goto(shot.path ? new URL(shot.path, cfg.url).href : cfg.url, { waitUntil: "load", timeout: 90000 }); // a dev server may be compiling
   await page.waitForTimeout(1500);
-  const d = new Director(page, rate);
-  await d.place(Math.round(W * 0.903), Math.round(H * 0.911));
-  await shot.setup?.({ page, d });
+  const start = { x: Math.round(W * 0.903), y: Math.round(H * 0.911) };
+  const d = new Director(page, rate, start);
+  await d.place(start.x, start.y);
+  if (Array.isArray(shot.setup)) {
+    const sd = new Director(page, 1, d.pos); // setup runs before the clock is slowed
+    await runSteps(shot.setup, { page, d: sd, cfg });
+    d.pos = sd.pos;
+  } else await shot.setup?.({ page, d });
   await page.waitForTimeout(600);
   console.log("  setup done, recording");
 
@@ -116,7 +134,8 @@ async function captureIn(shot, cfg, { page, cdp, browser }, rate, check) {
   let frames;
   try {
     await d.wait(shot.lead ?? 300);
-    await shot.act({ page, d });
+    if (shot.steps) await runSteps(shot.steps, { page, d, cfg });
+    else await shot.act({ page, d });
     await d.wait(shot.tail ?? 900);
   } finally {
     frames = await rec.stop();
@@ -126,7 +145,7 @@ async function captureIn(shot, cfg, { page, cdp, browser }, rate, check) {
     await page.screenshot({ path: join(cfg.out, ".debug", `${shot.id}.png`) });
     rmSync(dir, { recursive: true, force: true });
     console.log("  check: marks", JSON.stringify(d.marks.map((m) => m.what)));
-    return;
+    return { beats: d.marks.map((m) => m.what), steps: d.events.length, screenshot: join(cfg.out, ".debug", `${shot.id}.png`) };
   }
   const focusBox = shot.focus ? await shot.focus({ page, d }) : null;
   await browser.close();
@@ -144,7 +163,11 @@ async function captureIn(shot, cfg, { page, cdp, browser }, rate, check) {
   const payoff = shot.posterAtMs ?? (d.marks.at(-1)?.atMs ?? durationMs * 0.6) + 500;
   const pf = frames.reduce((best, f) => (Math.abs(f.wall * rate - payoff) < Math.abs(best.wall * rate - payoff) ? f : best), frames[0]);
   poster(pf.file, join(out, "poster.png"), crop);
-  writeFileSync(join(out, "timeline.json"), JSON.stringify({ viewport: { w: W, h: H, dpr: DPR }, durationMs, focus, marks: d.marks, cursor: d.cursor }, null, 1));
+  const timeline = { ...(shot.steps ? { version: 2, cam: shot.cam ?? {} } : {}), viewport: { w: W, h: H, dpr: DPR }, durationMs, focus, marks: d.marks, cursor: d.cursor, ...(shot.steps ? { events: d.events } : {}) };
+  writeFileSync(join(out, "timeline.json"), JSON.stringify(timeline, null, 1));
+  const captions = srt(d.events, durationMs);
+  rmSync(join(out, "captions.srt"), { force: true });
+  if (captions) writeFileSync(join(out, "captions.srt"), captions);
   rmSync(dir, { recursive: true, force: true });
   renderSmart(out, { python: cfg.python }); // smart.mp4: auto-zoom camera from the timeline's boxes and cursor
 
@@ -158,7 +181,7 @@ async function captureIn(shot, cfg, { page, cdp, browser }, rate, check) {
     demonstrates: shot.demonstrates,
     suggestedUse: shot.suggestedUse,
     moments: d.marks.map(({ atMs, what }) => ({ atMs, what })),
-    files: { smart: r(join(out, "smart.mp4")), full: r(join(out, "full.mp4")), focus: r(join(out, "focus.mp4")), slowmo: r(join(out, "slowmo.mp4")), poster: r(join(out, "poster.png")), timeline: r(join(out, "timeline.json")) },
+    files: { smart: r(join(out, "smart.mp4")), full: r(join(out, "full.mp4")), focus: r(join(out, "focus.mp4")), slowmo: r(join(out, "slowmo.mp4")), poster: r(join(out, "poster.png")), timeline: r(join(out, "timeline.json")), ...(captions ? { captions: r(join(out, "captions.srt")) } : {}) },
     size: { full: [W * DPR, H * DPR], focus: [crop.w, crop.h] },
     focusBoxCss: focus,
     fps: 60,
@@ -170,5 +193,5 @@ async function captureIn(shot, cfg, { page, cdp, browser }, rate, check) {
     alpha: false,
   }, cfg.features);
   console.log(`  ${frames.length} frames, ${capturedFps} fps of page time, ${(durationMs / 1000).toFixed(1)} s, focus ${focus.w}x${focus.h}`);
-  return capturedFps;
+  return { fps: capturedFps, durationMs, dir: out, beats: d.marks.map((m) => m.what) };
 }

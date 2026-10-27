@@ -1,13 +1,13 @@
 {
-  "name": "agent-recorder",
-  "version": "0.1.0",
-  "description": "Scripted, agent-driven product demo recording: slowed-clock retina capture, staged backends, smart camera.",
+  "name": "autocap",
+  "version": "0.2.0",
+  "description": "Agent-native Screen Studio: coding agents script, record and verify polished product demo clips of a web app.",
   "license": "MIT",
   "type": "module",
-  "bin": { "rec": "bin/rec.mjs" },
+  "bin": { "autocap": "bin/autocap.mjs", "rec": "bin/autocap.mjs" },
   "exports": { ".": "./src/index.mjs" },
-  "files": ["bin", "src"],
+  "files": ["bin", "src", "skill"],
   "engines": { "node": ">=20" },
-  "scripts": { "test": "node --test test/" },
+  "scripts": { "test": "node --test --test-concurrency=1 test/*.test.mjs" },
   "dependencies": { "playwright-core": "1.60" }
 }

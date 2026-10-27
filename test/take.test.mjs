@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
-const REC = join(import.meta.dirname, "..", "bin", "rec.mjs");
+const REC = join(import.meta.dirname, "..", "bin", "autocap.mjs");
 
 const PAGE = `<!doctype html><html><body style="margin:0;font:16px system-ui;background:#f4f4f6">
 <button id="go" style="position:absolute;left:600px;top:400px;padding:12px 20px">Go</button>
