@@ -57,3 +57,36 @@ test("look exits 2 with a hint when the shot has no take", () => {
   assert.equal(r.status, 2);
   assert.match(r.stderr, /no take for demo\.none; run rec take demo\.none/);
 });
+
+/** A take whose cut shows the page for 1 s, then a flat colour for 1.5 s (a page mid-transition), then the page again. */
+function blankTake() {
+  const dir = take();
+  const eff = join(dir, "assets", "effects", "demo.frame");
+  const src = (d) => ["-f", "lavfi", "-i", `testsrc=size=1920x1080:rate=60:duration=${d}`];
+  const ff = spawnSync("ffmpeg", ["-v", "error", "-y", ...src(1), "-f", "lavfi", "-i", "color=c=0xf4f2ec:size=1920x1080:rate=60:duration=1.5", ...src(0.5),
+    "-filter_complex", "concat=n=3:v=1:a=0", "-pix_fmt", "yuv420p", join(eff, "smart.mp4")]);
+  assert.equal(ff.status, 0, String(ff.stderr));
+  const tl = JSON.parse(readFileSync(join(eff, "timeline.json"), "utf8"));
+  tl.marks = [{ atMs: 600, what: "page", box: A }, { atMs: 1800, what: "mid transition", box: A }];
+  tl.events = [{ i: 0, verb: "click", atMs: 600, box: A, beat: "page" }];
+  writeFileSync(join(eff, "timeline.json"), JSON.stringify(tl));
+  return dir;
+}
+
+test("look fails a cut whose frames go blank, and says when", () => {
+  const r = look(blankTake(), "demo.frame", "--json");
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.ok, false);
+  assert.equal(out.blank.length, 1, JSON.stringify(out.blank));
+  const [s] = out.blank;
+  assert.ok(s.fromMs >= 750 && s.fromMs <= 1250 && s.toMs >= 2250 && s.toMs <= 2750, JSON.stringify(s));
+  assert.deepEqual(out.moments.map((m) => [m.what, m.inFrame, m.blank]), [["page", true, false], ["mid transition", true, true]]);
+  assert.match(r.stderr, /blank/);
+});
+
+test("look finds no blank stretch in a cut that always shows something", () => {
+  const out = JSON.parse(look(take(), "demo.frame", "--json").stdout);
+  assert.deepEqual(out.blank, []);
+  assert.ok(out.moments.every((m) => m.blank === false));
+});

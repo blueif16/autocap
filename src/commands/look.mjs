@@ -5,10 +5,13 @@ import { launch } from "../browser.mjs";
 import { RecError } from "../config.mjs";
 import { path as camPath, rect } from "../camera.mjs";
 
-export const usage = "look <shot> [--cut <file>] [--json]    contact sheet of a cut at each marked moment + whether the camera had the subject in frame";
+export const usage = "look <shot> [--cut <file>] [--json]    contact sheet of a cut at each marked moment, whether the camera had the subject in frame, and any blank stretch";
 export const config = "required";
 
 const FPS = 60, TILE = 640, AFTER_MS = 100, IN_FRAME = 0.9;
+// Blank check: sample the cut 4×/s as 320×180 luma. A frame is blank when under 0.5% of its pixels differ from its
+// median by more than 8 levels. Calibrated on real takes: a page mid-transition measured 0.00%, real UI 14% to 91%.
+const SAMPLE_FPS = 4, SW = 320, SH = 180, DIFF = 8, BLANK = 0.005;
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const readJson = (f) => JSON.parse(readFileSync(f, "utf8"));
 
@@ -37,6 +40,27 @@ function frameAt(file, sec) {
   const r = spawnSync("ffmpeg", ["-v", "error", "-ss", String(sec), "-i", file, "-frames:v", "1", "-vf", `scale=${TILE}:-2`, "-f", "image2pipe", "-vcodec", "png", "-"], { maxBuffer: 64 << 20 });
   if (r.error || r.status !== 0 || !r.stdout.length) throw new RecError(2, `cannot extract a frame at ${sec}s from ${file}: ${r.error?.message ?? String(r.stderr).trim()}`);
   return r.stdout;
+}
+
+/** Stretches of the cut where the frame shows nothing: [{ fromMs, toMs }]. */
+function blankStretches(file) {
+  const r = spawnSync("ffmpeg", ["-v", "error", "-i", file, "-vf", `fps=${SAMPLE_FPS},scale=${SW}:${SH},format=gray`, "-f", "rawvideo", "-"], { maxBuffer: 1 << 28 });
+  if (r.error || r.status !== 0) throw new RecError(2, `cannot sample ${file}: ${r.error?.message ?? String(r.stderr).trim()}`);
+  const n = SW * SH, step = 1000 / SAMPLE_FPS, out = [];
+  for (let f = 0; f < Math.floor(r.stdout.length / n); f++) {
+    const px = r.stdout.subarray(f * n, (f + 1) * n);
+    const hist = new Uint32Array(256);
+    for (const v of px) hist[v]++;
+    let med = 0;
+    for (let acc = 0; (acc += hist[med]) < n / 2; med++);
+    let detail = 0;
+    for (let v = 0; v < 256; v++) if (Math.abs(v - med) > DIFF) detail += hist[v];
+    if (detail / n >= BLANK) continue;
+    const last = out.at(-1);
+    if (last && last.toMs === f * step) last.toMs += step;
+    else out.push({ fromMs: f * step, toMs: (f + 1) * step });
+  }
+  return out;
 }
 
 export async function run({ cfg, args, flags }) {
@@ -75,12 +99,16 @@ export async function run({ cfg, args, flags }) {
     return { n: i + 1, what: m.what, atMs: m.atMs, t, box: m.box, camera, zoom: widest / p.w, coverage, inFrame: coverage === null ? null : coverage >= IN_FRAME };
   });
 
-  for (const m of moments) m.png = frameAt(cutFile, (m.t / 1000).toFixed(3));
+  const blank = blankStretches(cutFile);
+  for (const m of moments) {
+    m.png = frameAt(cutFile, (m.t / 1000).toFixed(3));
+    m.blank = blank.some((b) => m.t >= b.fromMs && m.t < b.toMs);
+  }
 
   const mark = (m) => (m.inFrame === null ? "–" : m.inFrame ? "✓" : "✗");
-  const caption = (m) => `#${m.n}  ${m.what} · ${(m.t / 1000).toFixed(2)} s · ${m.zoom.toFixed(1)}× · in frame ${mark(m)}`;
+  const caption = (m) => `#${m.n}  ${m.what} · ${(m.t / 1000).toFixed(2)} s · ${m.zoom.toFixed(1)}× · in frame ${mark(m)}${m.blank ? " · BLANK" : ""}`;
   const cols = Math.min(moments.length, 3);
-  const tiles = moments.map((m) => `<figure class="${m.inFrame === false ? "bad" : ""}"><img src="data:image/png;base64,${m.png.toString("base64")}"><figcaption>${esc(caption(m))}</figcaption></figure>`).join("");
+  const tiles = moments.map((m) => `<figure class="${m.inFrame === false || m.blank ? "bad" : ""}"><img src="data:image/png;base64,${m.png.toString("base64")}"><figcaption>${esc(caption(m))}</figcaption></figure>`).join("");
   const sheet = join(dir, "look.png");
   const s = await launch({ width: cols * (TILE + 18) + 6, height: 100, dpr: 1, chrome: cfg.chrome }).catch((e) => {
     throw new RecError(2, `cannot start Chrome: ${e.message.split("\n")[0]}`);
@@ -93,14 +121,16 @@ export async function run({ cfg, args, flags }) {
     await s.browser.close().catch(() => {});
   }
 
-  const out = moments.map(({ n, what, atMs, box, camera, zoom, coverage, inFrame }) => ({ n, what, atMs, box, camera, zoom, coverage, inFrame }));
+  const out = moments.map(({ n, what, atMs, box, camera, zoom, coverage, inFrame, blank }) => ({ n, what, atMs, box, camera, zoom, coverage, inFrame, blank }));
   const bad = out.filter((m) => m.inFrame === false);
-  const ok = bad.length === 0;
-  if (flags.json) process.stdout.write(JSON.stringify({ ok, shot: shot.id, cut: cutName, sheet, durationMs, capturedFps, moments: out }) + "\n");
+  const ok = bad.length === 0 && blank.length === 0;
+  if (flags.json) process.stdout.write(JSON.stringify({ ok, shot: shot.id, cut: cutName, sheet, durationMs, capturedFps, blank, moments: out }) + "\n");
   else {
     for (const m of moments) console.log(caption(m) + (m.coverage === null ? "" : `  coverage ${(m.coverage * 100).toFixed(0)}%`));
     console.log(`sheet: ${sheet}`);
   }
-  if (!ok) console.error(`rec: out of frame: ${bad.map((m) => `#${m.n} ${m.what} (coverage ${(m.coverage * 100).toFixed(0)}%)`).join(", ")}`);
+  if (bad.length) console.error(`rec: out of frame: ${bad.map((m) => `#${m.n} ${m.what} (coverage ${(m.coverage * 100).toFixed(0)}%)`).join(", ")}`);
+  const sec = (ms) => (ms / 1000).toFixed(2);
+  if (blank.length) console.error(`rec: blank frames at ${blank.map((b) => `${sec(b.fromMs)}–${sec(b.toMs)} s`).join(", ")}: the frame shows almost nothing (a page transition, a reload, or the camera on empty space). Check those times in the cut, then fix the step or re-take.`);
   return ok ? 0 : 1;
 }

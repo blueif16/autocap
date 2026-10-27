@@ -9,7 +9,7 @@ agent. There is no MCP server: it is a CLI plus one skill. The CLI answers to `a
   no click (`see`). Styles per shot or per step: zoom on everything, clicks only or beats only; stay wide; follow;
   hold; pan; cut; zoom level; region. Any aspect: 16:9, 9:16, 1:1.
 - **Staged backends.** Fake EventSource streams and fetch answers, so AI or live data plays the same every take.
-- **Agents verify without watching.** `rec look` gives a contact sheet plus a per-beat framing report; `rec scan`
+- **Agents verify without watching.** `rec look` gives a contact sheet plus a per-beat framing report, and fails clips that go blank; `rec scan`
   gives a context sheet of the running app.
 
 ## For coding agents: start here
