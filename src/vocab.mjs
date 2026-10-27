@@ -66,7 +66,7 @@ export const SHOT = {
 
 /** Target string syntax (resolved by src/target.mjs). Every target must match exactly one element. */
 export const TARGETS = {
-  'text=Sign in': "visible text, case-insensitive substring",
+  'text=Sign in': "visible text, case-insensitive substring; matches every element holding it, so a common word matches many",
   'text="Sign in"': "exact text",
   'role=button[name="Launch"]': "ARIA role + accessible name (best for buttons, links, tabs)",
   "label=Email": "an input by its label",
@@ -77,7 +77,35 @@ export const TARGETS = {
   "A >> B": "B inside A; `>> nth=0` picks one of several matches",
 };
 
+/** Camera intent → setting (`rec guide cam`). */
+export const INTENTS = [
+  ["zoom on every click / typed field (default)", 'nothing, or shot cam: { auto: "all" }'],
+  ["zoom only on clicks, not hovers", 'shot cam: { auto: "clicks" }'],
+  ["zoom only on the moments that matter", 'shot cam: { auto: "beats" } + beat: on those steps'],
+  ["keep the overview the whole time", 'shot cam: { auto: "off" }, or rec cut --cam off afterwards'],
+  ["a softer punch-in for the whole shot", "shot cam: { max: 1.6 }"],
+  ["a fixed punch-in level", "step zoom: 1.8"],
+  ["pull back for one step", 'step cam: "wide"'],
+  ["track the cursor across a drag or a long move", 'step cam: "follow"'],
+  ["don't move for this step", 'step cam: "hold"'],
+  ["slide sideways at the same zoom", 'step cam: "pan"'],
+  ["hard cut instead of a move", 'step cam: "cut"'],
+  ["frame an area, not an element (e.g. a target and its result)", "step region: { x, y, w, h } (CSS px)"],
+  ["a result appears with no click (card lands, status flips)", '{ see: "<target>", beat: "…" }'],
+];
+
 export const EXIT = { 0: "ok", 1: "a shot or check failed", 2: "setup or usage problem", 3: "bad config or shot (validation)" };
+
+/** `rec guide <topic>`: one slice of this file each, so an agent reads only what it needs. `rec guide` lists them. */
+export const TOPICS = {
+  steps: "the 12 step verbs and the options any step takes",
+  shot: "shot fields and one complete example shot",
+  targets: "how a step names the element it acts on",
+  cam: "camera: auto modes, per-step modes, zoom limit and padding, feel, end; intent → setting",
+  loop: "the six-step workflow, from reading the codebase to a checked clip",
+  commands: "every command and its flags",
+  exit: "exit codes",
+};
 
 export const verbOf = (step) => Object.keys(step).filter((k) => k in VERBS);
 
