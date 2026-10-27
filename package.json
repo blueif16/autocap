@@ -1,6 +1,6 @@
 {
   "name": "agent-recorder",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Scripted, agent-driven product demo recording: slowed-clock retina capture, staged backends, smart camera.",
   "license": "MIT",
   "type": "module",
