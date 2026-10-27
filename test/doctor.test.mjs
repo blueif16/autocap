@@ -7,7 +7,9 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
 const REC = join(import.meta.dirname, "..", "bin", "autocap.mjs");
-const doctor = (cwd, ...args) => spawnSync(process.execPath, [REC, "doctor", "--json", ...args], { cwd, encoding: "utf8" });
+// No test here asserts on Chrome, so a stub keeps doctor from launching it: these run in the fast suite.
+const NO_CHROME = { ...process.env, REC_CHROME: "/usr/bin/false" };
+const doctor = (cwd, ...args) => spawnSync(process.execPath, [REC, "doctor", "--json", ...args], { cwd, encoding: "utf8", env: NO_CHROME });
 const checks = (r) => Object.fromEntries(JSON.parse(r.stdout).checks.map((c) => [c.name, c]));
 
 function app(url) {
