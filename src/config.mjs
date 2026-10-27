@@ -54,3 +54,11 @@ export async function loadConfig(file) {
     shots,
   };
 }
+
+/** Shots whose id starts with any prefix (all shots when no prefix). A prefix matching nothing is an error (exit 1). */
+export function pickShots(cfg, prefixes) {
+  if (!prefixes.length) return cfg.shots;
+  const pick = cfg.shots.filter((s) => prefixes.some((a) => s.id.startsWith(a)));
+  if (!pick.length) throw new RecError(1, `no shot matches ${prefixes.join(" ")}`);
+  return pick;
+}
