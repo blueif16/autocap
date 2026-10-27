@@ -8,7 +8,10 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { join } from "node:path";
 
 const FPS = 60;
-const MAX_ZOOM = 2.4; // narrowest view = 1/2.4 of the window width (600 CSS px of 1440)
+const MAX_ZOOM = 2.4; // code shots (timeline v1): narrowest view = 1/2.4 of the window width (600 CSS px of 1440)
+// Steps shots: 2x, the moderate preset of comparable tools (Tella, screenforge; OpenScreen uses 1.8). At 2.4 every
+// small target landed at the limit and the viewer saw the label, not the result (dogfood, .tasks/research/B-dogfood.md).
+const STEPS_MAX = 2;
 const PAD = 70; // CSS px around a framed element
 const LEAD = 700, ARRIVE = 160; // start moving LEAD ms before a moment, be there ARRIVE ms before it
 
@@ -41,7 +44,7 @@ export function rect(c, aspect = "16:9") {
 }
 
 /** Shot camera settings: timelines from step shots (version 2) end wide; code shots keep their original look. */
-export const camSettings = (tl, over = {}) => ({ auto: "all", feel: "smooth", max: MAX_ZOOM, pad: PAD, end: tl.version >= 2 ? "wide" : "hold", ...tl.cam, ...over });
+export const camSettings = (tl, over = {}) => ({ auto: "all", feel: "smooth", max: tl.version >= 2 ? STEPS_MAX : MAX_ZOOM, pad: PAD, end: tl.version >= 2 ? "wide" : "hold", ...tl.cam, ...over });
 
 const AUTO = {
   all: () => true,
@@ -89,7 +92,7 @@ export function plan(tl, opts = {}) {
     let target;
     if (g.mode === "wide") target = wide;
     else if (g.mode === "pan") target = clampCam({ cx: g.box.x + g.box.w / 2, cy: g.box.y + g.box.h / 2, w: prev.w }, W, H, ar);
-    else if (g.level) target = clampCam({ cx: g.box.x + g.box.w / 2, cy: g.box.y + g.box.h / 2, w: wideW / Math.min(g.level, cam.max) }, W, H, ar);
+    else if (g.level) target = clampCam({ cx: g.box.x + g.box.w / 2, cy: g.box.y + g.box.h / 2, w: wideW / g.level }, W, H, ar); // a step's zoom is exact
     else if (g.region) target = clampCam({ cx: g.box.x + g.box.w / 2, cy: g.box.y + g.box.h / 2, w: Math.max(g.box.w, (g.box.h * ar[0]) / ar[1]) }, W, H, ar);
     else target = clampCam(frameFor(g.box, W, H, ar, cam), W, H, ar);
     const extra = { ...(g.follow ? { follow: g.follow } : {}) };
