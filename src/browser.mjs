@@ -6,9 +6,7 @@ import { mkdirSync, rmSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-const CHROME = process.env.REC_CHROME ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-
-// One virtual clock for performance.now, Date.now, rAF timestamps and timer delays. CSS and WAAPI animations
+// One virtual clock for performance.now, Date.now / new Date(), rAF timestamps and timer delays. CSS and WAAPI animations
 // are slowed separately through CDP (Animation.setPlaybackRate), by the same factor.
 const DILATE = `(() => {
   const rn = performance.now.bind(performance), rd = Date.now;
@@ -16,7 +14,11 @@ const DILATE = `(() => {
   const vnow = () => v0 + (rn() - w0) * rate;
   window.__setRate = r => { v0 = vnow(); w0 = rn(); rate = r; };
   window.__vnow = vnow;
-  performance.now = vnow; Date.now = () => Math.round(d0 + vnow());
+  const RD = Date, now = () => Math.round(d0 + vnow());
+  performance.now = vnow; RD.now = now;
+  function D(...a) { return new.target ? (a.length ? new RD(...a) : new RD(now())) : new RD(now()).toString(); }
+  D.prototype = RD.prototype; D.now = now; D.parse = RD.parse; D.UTC = RD.UTC;
+  window.Date = D;
   const raf = window.requestAnimationFrame.bind(window);
   window.requestAnimationFrame = cb => raf(() => cb(vnow()));
   const st = window.setTimeout.bind(window), si = window.setInterval.bind(window);
@@ -24,8 +26,9 @@ const DILATE = `(() => {
   window.setInterval = (f, ms = 0, ...a) => si(f, ms / rate, ...a);
 })();`;
 
-export async function launch({ width = 1440, height = 900, dpr = 2, transparent = false, chrome = CHROME } = {}) {
-  const browser = await chromium.launch({ executablePath: chrome, args: ["--disable-frame-rate-limit", "--disable-gpu-vsync", "--hide-scrollbars"] });
+/** Google Chrome: `chrome` (or $REC_CHROME) as an executable path, else the installed Chrome found by Playwright. */
+export async function launch({ width = 1440, height = 900, dpr = 2, transparent = false, chrome = process.env.REC_CHROME } = {}) {
+  const browser = await chromium.launch({ ...(chrome ? { executablePath: chrome } : { channel: "chrome" }), args: ["--disable-frame-rate-limit", "--disable-gpu-vsync", "--hide-scrollbars"] });
   const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: dpr, reducedMotion: "no-preference" });
   const page = await context.newPage();
   await page.addInitScript(DILATE);
