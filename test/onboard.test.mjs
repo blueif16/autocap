@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { validateSteps } from "../src/steps.mjs";
-import { VERBS, TOPICS } from "../src/vocab.mjs";
+import { VERBS, TOPICS, CAM } from "../src/vocab.mjs";
 
 const REC = join(import.meta.dirname, "..", "bin", "autocap.mjs");
 const rec = (cwd, ...args) => spawnSync(process.execPath, [REC, ...args], { cwd, encoding: "utf8" });
@@ -52,8 +52,7 @@ test("guide <topic> prints only that topic", () => {
 
 test("guide cam includes the zoom limit and padding a shot can set", () => {
   const cam = rec(tmp(), "guide", "cam").stdout;
-  assert.match(cam, /\bmax\b.*2\.4/);
-  assert.match(cam, /\bpad\b/);
+  for (const k of ["max", "pad"]) assert.ok(cam.includes(CAM.shot[k]), `cam.${k} is missing`);
 });
 
 test("guide all is every topic, in order", () => {

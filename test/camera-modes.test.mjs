@@ -109,3 +109,18 @@ test("in a vertical cut the overview centers on where the action is", () => {
   const p = path(tl([click(1000, left), click(2000, left2)], { auto: "off" }), { aspect: 9 / 16 });
   for (const [ms, b] of [[1000, left], [2000, left2]]) assert.ok(inside(center(b), rect(at(p, ms), 9 / 16)), `target at ${ms} ms is in the vertical overview`);
 });
+
+test("the default camera stops at 2x on a small target in a steps shot", () => {
+  const c = at(path(tl([click(1000, A)], { end: "hold" })), 2500); // settled: the camera holds after the click
+  assert.ok(Math.abs(c.w - W / 2) < 2, `w ${c.w}, want ${W / 2}`);
+});
+
+test("a step's own zoom goes past the shot's default limit", () => {
+  const c = at(path(tl([click(1000, A, { zoom: 2.4 })], { end: "hold" })), 2500); // settled: the camera holds after the click
+  assert.ok(Math.abs(c.w - W / 2.4) < 2, `w ${c.w}, want ${W / 2.4}`);
+});
+
+test("cam.max caps the automatic zoom", () => {
+  const c = at(path(tl([click(1000, A)], { end: "hold", max: 1.5 })), 2500);
+  assert.ok(Math.abs(c.w - W / 1.5) < 2, `w ${c.w}, want ${W / 1.5}`);
+});
