@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { validateSteps } from "../src/steps.mjs";
+import { VERBS, TOPICS } from "../src/vocab.mjs";
 
 const REC = join(import.meta.dirname, "..", "bin", "autocap.mjs");
 const rec = (cwd, ...args) => spawnSync(process.execPath, [REC, ...args], { cwd, encoding: "utf8" });
@@ -26,12 +27,55 @@ test("guide --json lists the step camera modes, and every one is accepted on a s
   for (const m of g.cam.step) validateSteps([{ click: "#a", cam: m }]);
 });
 
-test("guide prints the loop and an example shot for humans", () => {
-  const r = rec(tmp(), "guide");
+test("guide all prints the loop and an example shot for humans", () => {
+  const r = rec(tmp(), "guide", "all");
   assert.equal(r.status, 0);
   assert.match(r.stdout, /understand the codebase/i);
   assert.match(r.stdout, /rec take/);
   assert.match(r.stdout, /steps: \[/);
+});
+
+test("bare guide is a short index of its topics, not the whole vocabulary", () => {
+  const r = rec(tmp(), "guide");
+  assert.equal(r.status, 0);
+  for (const t of Object.keys(TOPICS)) assert.match(r.stdout, new RegExp(`\\b${t}\\b`), t);
+  assert.doesNotMatch(r.stdout, /steps: \[/);
+  assert.ok(r.stdout.length < 800, `${r.stdout.length} chars`);
+});
+
+test("guide <topic> prints only that topic", () => {
+  const targets = rec(tmp(), "guide", "targets").stdout;
+  assert.match(targets, /role=/);
+  assert.doesNotMatch(targets, /understand the codebase/i);
+  assert.doesNotMatch(targets, /goto:/);
+});
+
+test("guide cam includes the zoom limit and padding a shot can set", () => {
+  const cam = rec(tmp(), "guide", "cam").stdout;
+  assert.match(cam, /\bmax\b.*2\.4/);
+  assert.match(cam, /\bpad\b/);
+});
+
+test("guide all is every topic, in order", () => {
+  const all = rec(tmp(), "guide", "all").stdout;
+  let at = -1;
+  for (const t of Object.keys(TOPICS)) {
+    const slice = rec(tmp(), "guide", t).stdout.trim();
+    const i = all.indexOf(slice);
+    assert.ok(i > at, `${t} is missing from guide all, or out of order`);
+    at = i;
+  }
+});
+
+test("an unknown guide topic exits 2 and lists the topics", () => {
+  const r = rec(tmp(), "guide", "verbs-please");
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /steps/);
+});
+
+test("the skill names every verb, so a first shot can be drafted from it", () => {
+  const md = readFileSync(join(import.meta.dirname, "..", "skill", "SKILL.md"), "utf8");
+  for (const v of Object.keys(VERBS)) assert.match(md, new RegExp("`" + v + "`"), v);
 });
 
 test("init writes a config and a first shot that rec ls lists", () => {
