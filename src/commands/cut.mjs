@@ -23,11 +23,12 @@ export async function run({ cfg, args, flags }) {
   for (const f of formats) if (f !== "gif" && !AS[f]) throw new RecError(2, `--as ${f}: use wide, vertical, square or gif`);
   if (flags.cam && !(flags.cam in CAM.auto)) throw new RecError(2, `--cam ${flags.cam}: use ${Object.keys(CAM.auto).join(", ")}`);
   const cam = flags.cam ? { auto: flags.cam } : undefined;
-  const cuts = [];
+  const cuts = [], untaken = [];
   for (const s of pickShots(cfg, args)) {
     const dir = join(cfg.out, "effects", s.id);
     if (!existsSync(join(dir, "timeline.json"))) {
-      console.error(`  ${s.id}: no take yet (rec take ${s.id})`);
+      console.error(`  ✗ ${s.id}: no take yet (rec take ${s.id})`);
+      untaken.push(s.id);
       continue;
     }
     const files = {};
@@ -47,6 +48,7 @@ export async function run({ cfg, args, flags }) {
     cuts.push({ id: s.id, files });
     console.log(`  ${s.id}: ${Object.values(files).join(", ")}`);
   }
-  if (flags.json) process.stdout.write(JSON.stringify({ ok: true, cuts }) + "\n");
-  return 0;
+  const ok = untaken.length === 0;
+  if (flags.json) process.stdout.write(JSON.stringify({ ok, cuts, ...(!ok && { untaken, fix: `rec take ${untaken.join(" ")}` }) }) + "\n");
+  return ok ? 0 : 1;
 }
