@@ -5,7 +5,7 @@ import { RecError } from "../config.mjs";
 export const usage = "init [url]               write rec.config.mjs and a first shot in rec/shots/";
 export const config = "none";
 
-const CONFIG = (url) => `// agent-recorder config: npx rec guide for the vocabulary.
+const CONFIG = (url) => `// autocap config: npx rec guide for the vocabulary.
 export default {
   url: ${JSON.stringify(url)},
   out: "rec-assets",

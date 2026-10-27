@@ -11,7 +11,7 @@ export async function run({ flags }) {
     process.stdout.write(flags.json ? JSON.stringify({ ok: true, skill: md }) + "\n" : md);
     return 0;
   }
-  const dir = join(flags.dir ?? join(homedir(), ".claude", "skills"), "agent-recorder");
+  const dir = join(flags.dir ?? join(homedir(), ".claude", "skills"), "autocap");
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "SKILL.md"), md);
   if (flags.json) process.stdout.write(JSON.stringify({ ok: true, path: join(dir, "SKILL.md") }) + "\n");

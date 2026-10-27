@@ -1,16 +1,16 @@
 ---
-name: agent-recorder
-description: Make polished product demo clips of a web app with the `rec` CLI (agent-recorder): understand the app, plan a story, script shots as steps, record them on a slowed clock with a smart camera, and verify every clip without watching it. TRIGGER when asked to record, film or capture a web app, make demo/promo/feature videos, clips, reels or GIFs of an app, re-record or re-cut existing rec clips, or when a repo has a rec.config.mjs.
+name: autocap
+description: Make polished product demo clips of a web app with autocap (CLI `rec`), an agent-native Screen Studio: understand the app, plan a story, script shots as steps, record them on a slowed clock with a smart camera, and verify every clip without watching it. TRIGGER when asked to record, film or capture a web app, make demo/promo/feature videos, clips, reels or GIFs of an app, re-record or re-cut existing rec clips, or when a repo has a rec.config.mjs.
 ---
 
-# Agent Recorder (`rec`)
+# autocap (`rec`)
 
 You write shots as data; `rec` plays them in Chrome with the page clock slowed (every animation is captured at
 60 fps), and a camera frames what each step says. You never watch video: `rec look` gives you one contact-sheet
 image and a framing report per clip. Run `npx rec guide` for the full vocabulary; it is the source of truth.
 
 ## Setup (once per app)
-1. `npm i -D github:blueif16/agent-recorder` (needs Google Chrome, ffmpeg, and uv or a Python with Pillow).
+1. `npm i -D github:blueif16/autocap` (needs Google Chrome, ffmpeg, and uv or a Python with Pillow).
 2. `npx rec doctor`: fix every ✗ using its `fix:` line before going further. `!` lines are warnings.
 3. `npx rec init <app url>`: writes `rec.config.mjs` and `rec/shots/first.mjs`. Start the app, then `npx rec take first`.
 

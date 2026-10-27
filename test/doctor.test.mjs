@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
-const REC = join(import.meta.dirname, "..", "bin", "rec.mjs");
+const REC = join(import.meta.dirname, "..", "bin", "autocap.mjs");
 const doctor = (cwd, ...args) => spawnSync(process.execPath, [REC, "doctor", "--json", ...args], { cwd, encoding: "utf8" });
 const checks = (r) => Object.fromEntries(JSON.parse(r.stdout).checks.map((c) => [c.name, c]));
 

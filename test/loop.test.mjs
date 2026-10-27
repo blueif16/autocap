@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { spawnSync, execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
-const REC = join(import.meta.dirname, "..", "bin", "rec.mjs");
+const REC = join(import.meta.dirname, "..", "bin", "autocap.mjs");
 const run = (cwd, ...args) => spawnSync(process.execPath, [REC, ...args], { cwd, encoding: "utf8", env: { ...process.env, REC_RATE: "0.25" }, timeout: 300000 });
 const probe = (f) => execFileSync("ffprobe", ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", f], { encoding: "utf8" }).trim();
 

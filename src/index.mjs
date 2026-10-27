@@ -1,4 +1,4 @@
-// Building blocks for shots and app adapters. The rec CLI (bin/rec.mjs) is the usual entry point.
+// Building blocks for shots and app adapters. The autocap CLI (bin/autocap.mjs, also `rec`) is the usual entry point.
 export { launch, setRate, recorder, CLEAN_CSS } from "./browser.mjs";
 export { encodeMp4, encodeAlpha, poster } from "./encode.mjs";
 export { installStage, rule, emit } from "./stage.mjs";

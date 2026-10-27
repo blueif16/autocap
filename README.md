@@ -1,7 +1,7 @@
-# agent-recorder
+# autocap
 
-`rec` records polished demo clips of a web app, driven entirely by a coding agent. There is no MCP server: it is
-a CLI plus one skill.
+An agent-native Screen Studio. `autocap` records polished demo clips of a web app, driven entirely by a coding
+agent. There is no MCP server: it is a CLI plus one skill. The CLI answers to `autocap` and to the short `rec`.
 
 - **Smooth capture.** The page clock is slowed during capture, so every spring, fade and pop is caught at 60 fps.
 - **Shots are steps, not code.** A fixed vocabulary of 12 verbs, validated before anything runs.
@@ -15,9 +15,9 @@ a CLI plus one skill.
 ## Install
 
 ```sh
-npm i -D github:blueif16/agent-recorder   # needs Google Chrome, ffmpeg, and uv (or a Python with Pillow)
+npm i -D github:blueif16/autocap         # needs Google Chrome, ffmpeg, and uv (or a Python with Pillow)
 npx rec doctor                            # every failing check prints its fix
-npx rec skill --install                   # puts SKILL.md in ~/.claude/skills/agent-recorder/
+npx rec skill --install                   # puts SKILL.md in ~/.claude/skills/autocap/
 npx rec init http://localhost:3000        # rec.config.mjs + rec/shots/first.mjs
 ```
 

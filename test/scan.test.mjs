@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
-const REC = join(import.meta.dirname, "..", "bin", "rec.mjs");
+const REC = join(import.meta.dirname, "..", "bin", "autocap.mjs");
 
 const STATIC = `<!doctype html><title>Static page</title><body style="margin:0;font:16px system-ui"><h1>Hello</h1><button>Go</button></body>`;
 const ANIMATED = `<!doctype html><title>Animated page</title><body style="margin:0;font:16px system-ui"><h1>Hello</h1>

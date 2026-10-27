@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
-const REC = join(import.meta.dirname, "..", "bin", "rec.mjs");
+const REC = join(import.meta.dirname, "..", "bin", "autocap.mjs");
 const W = 1440, H = 900;
 const A = { x: 100, y: 120, w: 160, h: 40 }; // top left: the camera frames it
 const B = { x: 1180, y: 740, w: 160, h: 40 }; // bottom right: cam "hold" keeps the camera on A

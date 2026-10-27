@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
-const REC = join(import.meta.dirname, "..", "bin", "rec.mjs");
+const REC = join(import.meta.dirname, "..", "bin", "autocap.mjs");
 const rec = (cwd, ...args) => spawnSync(process.execPath, [REC, ...args], { cwd, encoding: "utf8" });
 
 function app(config) {

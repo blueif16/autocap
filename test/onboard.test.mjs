@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { validateSteps } from "../src/steps.mjs";
 
-const REC = join(import.meta.dirname, "..", "bin", "rec.mjs");
+const REC = join(import.meta.dirname, "..", "bin", "autocap.mjs");
 const rec = (cwd, ...args) => spawnSync(process.execPath, [REC, ...args], { cwd, encoding: "utf8" });
 const tmp = () => mkdtempSync(join(tmpdir(), "rec-onboard-"));
 const SAMPLE = { goto: "/", click: "#a", hover: "#a", type: "x", key: "Enter", scroll: 100, drag: "#a", select: "#s", wait: 10, see: "#a", emit: "/s", run: () => {} };
@@ -56,8 +56,8 @@ test("skill --install --dir writes SKILL.md with its name and the loop", () => {
   const dir = tmp();
   const r = rec(tmp(), "skill", "--install", "--dir", dir);
   assert.equal(r.status, 0, r.stderr);
-  const md = readFileSync(join(dir, "agent-recorder", "SKILL.md"), "utf8");
-  assert.match(md, /^---\nname: agent-recorder\n/);
+  const md = readFileSync(join(dir, "autocap", "SKILL.md"), "utf8");
+  assert.match(md, /^---\nname: autocap\n/);
   assert.match(md, /rec look/);
   assert.ok(!existsSync(join(dir, "SKILL.md")), "installed in its own folder");
 });
