@@ -33,6 +33,8 @@ function app() {
       } },
     { id: "card.missing", feature: "cards", title: "Clicks a button that does not exist", demonstrates: "x",
       async act({ page, d }) { await d.click(page.locator("#nope")); } },
+    { id: "card.boom", feature: "cards", title: "Fails mid-recording", demonstrates: "x",
+      async act({ d }) { await d.wait(200); throw new Error("boom"); } },
   ],
 };`);
   return dir;
@@ -61,4 +63,12 @@ test("check fails a shot whose target is missing, exits 1 and leaves no clips", 
   assert.equal(r.status, 1);
   assert.match(r.stderr, /card\.missing/);
   assert.ok(!existsSync(join(dir, "assets", "effects", "card.missing")));
+});
+
+test("a take that fails mid-recording leaves no frames on disk", () => {
+  const dir = app();
+  const r = run(dir, "take", "card.boom");
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.match(r.stderr, /boom/);
+  assert.ok(!existsSync(join(dir, "assets", ".frames", "card.boom")), "frames left behind");
 });
