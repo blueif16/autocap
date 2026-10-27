@@ -80,3 +80,29 @@ export const TARGETS = {
 export const EXIT = { 0: "ok", 1: "a shot or check failed", 2: "setup or usage problem", 3: "bad config or shot (validation)" };
 
 export const verbOf = (step) => Object.keys(step).filter((k) => k in VERBS);
+
+/** CLI commands, in the order an agent meets them. Each lives in src/commands/<name>.mjs. */
+export const COMMANDS = ["guide", "doctor", "init", "skill", "scan", "ls", "check", "take", "cut", "look"];
+
+/** The loop the skill teaches: what to do, and what each step produces. */
+export const LOOP = [
+  ["Understand the codebase", "read routes, main features, and what animates or updates live → a feature list with file paths"],
+  ["Game plan", "which features deserve a clip, for whom, in what order → 3–8 clip ideas, one line each"],
+  ["Story plan", "per clip: the beats a viewer must see, the camera style, the aspect → a shot list"],
+  ["Write", "one shot file per clip in rec/shots/, using only this vocabulary"],
+  ["Find the pages", "rec scan <paths> for a context sheet of the running app; targets come from the code; rec check until every target resolves"],
+  ["Record", "rec take, then rec look until ok is true, then rec cut --as vertical,gif for variants"],
+];
+
+export const EXAMPLE = `export default {
+  id: "notes.add",
+  title: "Add a note and watch it land",
+  path: "/",
+  cam: { auto: "clicks" },
+  steps: [
+    { type: "Buy milk", into: "placeholder=New note", say: "Jot it down" },
+    { click: 'role=button[name="Add"]', beat: "add" },
+    { see: "text=Buy milk", beat: "note lands", cam: "follow" },
+    { wait: 600, cam: "wide" },
+  ],
+};`;

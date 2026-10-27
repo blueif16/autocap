@@ -3,8 +3,8 @@
 // `usage` (one line), `config` ("required" | "optional" | "none") and `run({ cfg, args, flags }) → exit code`.
 // --json: stdout carries exactly one JSON document; progress goes to stderr.
 import { loadConfig, RecError } from "../src/config.mjs";
+import { COMMANDS } from "../src/vocab.mjs";
 
-const COMMANDS = ["guide", "doctor", "init", "skill", "scan", "ls", "check", "take", "cut", "look"];
 const BOOLEAN = new Set(["json", "install", "help"]);
 
 function parse(argv) {
