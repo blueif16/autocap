@@ -7,7 +7,7 @@ description: Make polished product demo clips of a web app with autocap (CLI `re
 
 You write shots as data; `rec` plays them in Chrome with the page clock slowed (every animation is captured at
 60 fps), and a camera frames what each step says. You never watch video: `rec look` gives you one contact-sheet
-image and a framing report per clip. Run `npx rec guide` for the full vocabulary; it is the source of truth.
+image and a framing report per clip, and fails a clip that goes blank. Run `npx rec guide` for the full vocabulary; it is the source of truth.
 
 ## Setup (once per app)
 1. `npm i -D github:blueif16/autocap` (needs Google Chrome, ffmpeg, and uv or a Python with Pillow).
