@@ -216,5 +216,7 @@ export function render(dir, { python: py, aspect = "16:9", cam, name = "smart.mp
   } finally {
     rmSync(camFile, { force: true });
   }
+  // How this cut was made, so `rec look` can rebuild the camera path for it.
+  writeFileSync(out.replace(/\.mp4$/, ".cut.json"), JSON.stringify({ file: name, aspect, cam: camSettings(tl, cam), size: SIZE[aspect] ?? SIZE["16:9"] }, null, 1));
   return out;
 }
