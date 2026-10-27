@@ -7,7 +7,7 @@
 // Apps add their own helpers on top of window.__stage from an init script registered in config `prepare`.
 
 const STAGE = (cfg) => {
-  const S = (window.__stage = { rules: [], es: [] });
+  const S = (window.__stage = { rules: [...(cfg.rules ?? [])], es: [] });
   const enc = new TextEncoder();
 
   const streamOf = (text, cps, delayMs) =>
@@ -107,7 +107,7 @@ const STAGE = (cfg) => {
   }, true);
 };
 
-/** cfg: { cursor, streams: [urlPart], block: [pathRegex], blockText: [pathRegex answered as empty text], ripple: "r,g,b" } */
+/** cfg: { cursor, streams: [urlPart], rules: [fetch rule], block: [pathRegex], blockText: [pathRegex answered as empty text], ripple: "r,g,b" } */
 export async function installStage(page, cfg = {}) {
   await page.addInitScript(STAGE, { cursor: true, ...cfg });
 }
