@@ -82,3 +82,63 @@ test("shots can be a folder with one shot file each, and feature defaults to the
   const shots = JSON.parse(r.stdout).shots;
   assert.deepEqual(shots.map((s) => [s.id, s.feature]).sort(), [["cart.add", "cart"], ["cart.pay", "cart"], ["menu.open", "menu"]]);
 });
+
+test("an unknown flag exits 2 naming it and the valid flags, and runs nothing", () => {
+  const r = rec(app(TWO_SHOTS), "ls", "--jsno", "menu.open");
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /--jsno/);
+  assert.match(r.stderr, /--json/);
+  assert.equal(r.stdout, "");
+});
+
+test("under --json an error is one document with the fix", () => {
+  const r = rec(app(TWO_SHOTS), "cut", "--json", "--bogus");
+  assert.equal(r.status, 2);
+  const doc = JSON.parse(r.stdout);
+  assert.equal(doc.ok, false);
+  assert.equal(doc.exit, 2);
+  assert.match(doc.fix, /--as/);
+});
+
+test("rec <command> --help prints only that command's usage", () => {
+  const r = rec(app(TWO_SHOTS), "cut", "--help");
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /cut \[prefix/);
+  assert.doesNotMatch(r.stdout, /scan \[path/);
+});
+
+test("an unknown command exits 2 with a one-line list of commands, not the whole usage", () => {
+  const r = rec(app(TWO_SHOTS), "bogus");
+  assert.equal(r.status, 2);
+  for (const c of ["guide", "doctor", "init", "skill", "scan", "ls", "check", "take", "cut", "look"]) assert.match(r.stderr, new RegExp(`\\b${c}\\b`));
+  assert.ok(r.stderr.length < 300, `${r.stderr.length} B`);
+});
+
+test("a flag value may contain '='", () => {
+  const dir = app(TWO_SHOTS);
+  writeFileSync(join(dir, "a=b.mjs"), TWO_SHOTS);
+  const r = rec(dir, "ls", "--config=a=b.mjs");
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /menu\.open/);
+});
+
+test("a config with a syntax error exits 3 and names the file", () => {
+  const r = rec(app(`export default { url: "http://localhost:1", shots: [ };`), "ls");
+  assert.equal(r.status, 3);
+  assert.match(r.stderr, /rec\.config\.mjs/);
+});
+
+test("cut with no take yet exits 1, and its JSON says ok:false with the fix", () => {
+  const r = rec(app(TWO_SHOTS), "cut", "menu.open", "--json");
+  assert.equal(r.status, 1);
+  const doc = JSON.parse(r.stdout);
+  assert.equal(doc.ok, false);
+  assert.match(doc.fix, /rec take menu\.open/);
+});
+
+test("--json output larger than a pipe buffer arrives whole", () => {
+  const shots = Array.from({ length: 3000 }, (_, i) => `{ id: "s.n${i}", title: "Shot number ${i} with a longer title", async act() {} }`);
+  const r = rec(app(`export default { url: "http://localhost:1", shots: [${shots.join(",")}] };`), "ls", "--json");
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(JSON.parse(r.stdout).shots.length, 3000);
+});

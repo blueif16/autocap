@@ -16,18 +16,24 @@ import { pathToFileURL } from "node:url";
 import { validateSteps } from "./steps.mjs";
 import { CAM } from "./vocab.mjs";
 
-/** An error with the exit code rec should end with: 1 shot failed · 2 setup/usage · 3 bad config or shot. */
+/** An error with the exit code rec should end with: 1 shot failed · 2 setup/usage · 3 bad config or shot. `fix` says what to do. */
 export class RecError extends Error {
-  constructor(code, message) {
+  constructor(code, message, fix) {
     super(message);
     this.code = code;
+    if (fix) this.fix = fix;
   }
 }
+
+/** Import a config or shot file; a file that doesn't parse or throws is a bad config (exit 3), named. */
+const importFile = (path) => import(pathToFileURL(path).href).catch((e) => {
+  throw new RecError(3, `${path}: ${e.message}`);
+});
 
 export async function loadConfig(file) {
   const path = resolve(file ?? "rec.config.mjs");
   if (!existsSync(path)) throw new RecError(2, `no rec.config.mjs at ${path} (run rec in the app's folder or pass --config <file>)`);
-  const c = (await import(pathToFileURL(path).href)).default ?? {};
+  const c = (await importFile(path)).default ?? {};
   if (!c.url) throw new RecError(3, `${path}: url is required`);
   const dir = dirname(path);
   const shots = typeof c.shots === "string" ? await shotFolder(resolve(dir, c.shots)) : c.shots ?? [];
@@ -85,7 +91,7 @@ async function shotFolder(folder) {
   if (!existsSync(folder) || !statSync(folder).isDirectory()) throw new RecError(3, `shots folder ${folder} does not exist`);
   const shots = [];
   for (const f of readdirSync(folder).filter((f) => f.endsWith(".mjs")).sort()) {
-    const d = (await import(pathToFileURL(join(folder, f)).href)).default;
+    const d = (await importFile(join(folder, f))).default;
     if (!d) throw new RecError(3, `${join(folder, f)} has no default export (a shot or an array of shots)`);
     shots.push(...(Array.isArray(d) ? d : [d]));
   }
