@@ -45,7 +45,7 @@ export const CAM = {
   },
   feel: { smooth: "default spring", snappy: "faster, tighter", gentle: "slower, softer" },
   end: { wide: "ease back to the overview at the end (default)", hold: "stay on the last framing" },
-  shot: { auto: "one of CAM.auto", max: "deepest zoom, default 2.4", pad: "CSS px around a framed target, default 70", feel: "one of CAM.feel", end: "one of CAM.end" },
+  shot: { auto: "one of CAM.auto", max: "deepest automatic zoom, default 2 (a step's own zoom may go further)", pad: "CSS px around a framed target, default 70", feel: "one of CAM.feel", end: "one of CAM.end" },
 };
 
 /** Shot fields. A shot has either `steps` or `act` (code), never both. */
