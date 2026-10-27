@@ -6,8 +6,10 @@ export const config = "required";
 /** Shared by take and check: runs each shot, keeps going after a failure, exit 1 if any failed. */
 export async function runShots({ cfg, args, flags }, check) {
   const { take } = await import("../take.mjs");
+  const shots = pickShots(cfg, args);
+  if (!check) (await import("./doctor.mjs")).preflight(cfg);
   const results = [];
-  for (const s of pickShots(cfg, args)) {
+  for (const s of shots) {
     try {
       const r = await take(s, cfg, { check });
       results.push({ id: s.id, ok: true, ...r });

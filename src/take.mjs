@@ -104,6 +104,7 @@ async function captureOnce(shot, cfg, rate, check) {
     throw e;
   } finally {
     await browser.close().catch(() => {});
+    rmSync(join(cfg.out, ".frames", shot.id), { recursive: true, force: true }); // a failed take must not leave GBs behind
   }
 }
 
