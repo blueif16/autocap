@@ -8,7 +8,7 @@
 // and an entry in <out>/manifest.json saying what it shows and why (feature, demonstrates, moments).
 import { mkdirSync, writeFileSync, rmSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { launch, setRate, recorder, CLEAN_CSS } from "./browser.mjs";
+import { launch, setRate, recorder, captureFps, CLEAN_CSS } from "./browser.mjs";
 import { encodeMp4, poster } from "./encode.mjs";
 import { installStage } from "./stage.mjs";
 import { Director } from "./director.mjs";
@@ -70,19 +70,24 @@ async function withRecordLock(out, fn) {
   }
 }
 
+// Page speed. The page is slowed so retina screenshots (8-22 per real second on a loaded M1) still give the clip
+// TARGET_FPS frames per page-second: 60 for the clip plus headroom. A fixed 0.1 gave 100-450 and took up to 6x longer
+// than needed. Measured just before each take; REC_RATE fixes it instead.
+const TARGET_FPS = 75;
+const rateFor = (realFps) => Math.min(1, Math.max(0.05, realFps / TARGET_FPS));
+
 /**
  * Records one shot; if the clip has < 60 fps of page time (machine under memory pressure), retries once at a slower
  * page speed. check: full speed, no recording or encoding, a screenshot in <out>/.debug/ when the shot fails or ends.
  */
 export async function take(shot, cfg, { check = false } = {}) {
-  // 0.1: even when the machine is busy (~10 fps of retina screenshots), that's 100 fps of page time.
-  let rate = check ? 1 : Number(process.env.REC_RATE ?? 0.1);
-  if (check) return captureOnce(shot, cfg, rate, true);
+  if (check) return captureOnce(shot, cfg, 1, true);
+  let rate = process.env.REC_RATE ? Number(process.env.REC_RATE) : null; // null: measured before recording
   return withRecordLock(cfg.out, async () => {
     for (let attempt = 0; ; attempt++) {
       const r = await captureOnce(shot, cfg, rate, false);
       if (r.fps >= 60 || attempt >= 1) return r;
-      rate = Math.max(0.05, (rate * r.fps) / 100);
+      rate = Math.max(0.05, (r.rate * r.fps) / 100);
       console.log(`  only ${r.fps} fps of page time; re-recording at ${rate.toFixed(3)}× page speed`);
     }
   });
@@ -94,7 +99,7 @@ async function captureOnce(shot, cfg, rate, check) {
   const s = await launch({ width: W, height: H, dpr, chrome: cfg.chrome });
   const { page, browser } = s;
   if (check && cfg.console) page.on("console", (m) => cfg.console.test(m.text()) && console.log("  " + m.text()));
-  page.setDefaultTimeout(8000 / rate); // Playwright waits are wall-clock; the page runs rate× slower
+  page.setDefaultTimeout(8000 / (rate ?? 1)); // Playwright waits are wall-clock; the page runs rate× slower
   try {
     return await captureIn(shot, cfg, s, rate, check);
   } catch (e) {
@@ -128,9 +133,16 @@ async function captureIn(shot, cfg, { page, cdp, browser }, rate, check) {
   await page.waitForTimeout(600);
   console.log("  setup done, recording");
 
+  const clip = { x: 0, y: 0, width: W, height: H };
+  if (!rate) {
+    // Measure on a slowed page: at full speed it is busier and screenshots come 1.3-2.3x slower than in the take.
+    await setRate(page, cdp, 0.1);
+    rate = d.rate = rateFor(await captureFps(cdp, { clip, scale: DPR }));
+  }
+  page.setDefaultTimeout(8000 / rate);
   await setRate(page, cdp, rate);
   const dir = join(cfg.out, ".frames", shot.id);
-  const rec = recorder(cdp, { dir, clip: { x: 0, y: 0, width: W, height: H }, scale: DPR });
+  const rec = recorder(cdp, { dir, clip, scale: DPR });
   d.start(rec);
   let frames;
   try {
@@ -173,6 +185,7 @@ async function captureIn(shot, cfg, { page, cdp, browser }, rate, check) {
   renderSmart(out, { python: cfg.python }); // smart.mp4: auto-zoom camera from the timeline's boxes and cursor
 
   const capturedFps = Math.round(frames.length / (durationMs / 1000));
+  const warnings = capturedFps < 60 * SLOW ? [`slowmo.mp4 repeats frames: ${capturedFps} fps of page time, ${60 * SLOW} needed for ${SLOW}x (REC_RATE=${(rate * capturedFps / (60 * SLOW)).toFixed(3)} gives that)`] : [];
   const r = (p) => rel(cfg.out, p);
   addToManifest(cfg.out, {
     id: `effect.${shot.id}`,
@@ -192,7 +205,9 @@ async function captureIn(shot, cfg, { page, cdp, browser }, rate, check) {
     cursor: stage.cursor,
     staged: shot.staged ?? null,
     alpha: false,
+    ...(warnings.length ? { warnings } : {}),
   }, cfg.features);
-  console.log(`  ${frames.length} frames, ${capturedFps} fps of page time, ${(durationMs / 1000).toFixed(1)} s, focus ${focus.w}x${focus.h}`);
-  return { fps: capturedFps, durationMs, dir: out, beats: d.marks.map((m) => m.what) };
+  console.log(`  ${frames.length} frames, ${capturedFps} fps of page time at ${rate.toFixed(3)}x page speed, ${(durationMs / 1000).toFixed(1)} s, focus ${focus.w}x${focus.h}`);
+  for (const w of warnings) console.log(`  ! ${w}`);
+  return { fps: capturedFps, rate: Number(rate.toFixed(3)), durationMs, dir: out, beats: d.marks.map((m) => m.what), ...(warnings.length ? { warnings } : {}) };
 }

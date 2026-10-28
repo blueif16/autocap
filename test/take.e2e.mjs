@@ -72,3 +72,13 @@ test("a take that fails mid-recording leaves no frames on disk", () => {
   assert.match(r.stderr, /boom/);
   assert.ok(!existsSync(join(dir, "assets", ".frames", "card.boom")), "frames left behind");
 });
+
+test("without REC_RATE, take paces the page to the capture speed: 60-200 fps of page time, and says when slow-mo repeats frames", () => {
+  const dir = app();
+  const { REC_RATE, ...env } = process.env;
+  const r = spawnSync(process.execPath, [REC, "take", "card.pop", "--json"], { cwd: dir, encoding: "utf8", env, timeout: 180000 });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  const [res] = JSON.parse(r.stdout).results;
+  assert.ok(res.fps >= 60 && res.fps <= 200, `${res.fps} fps of page time at ${res.rate}x`);
+  if (res.fps < 180) assert.ok(res.warnings?.some((w) => /slowmo/.test(w)), JSON.stringify(res));
+});
