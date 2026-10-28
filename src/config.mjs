@@ -6,7 +6,8 @@
 //   prepare({ page, shot })  app init scripts, run after the stage is installed and before the page loads
 //   console    regex: page console lines echoed during `rec check`
 //   python     interpreter with Pillow for the camera renderer   chrome  Chrome executable
-//   slowmo     slow-motion factor (default 3)      shots      [shot], or a folder of shot files
+//   extras     ["focus", "slowmo"]: clips a take also writes (default none: smart.mp4, full.mp4, poster, timeline)
+//   slowmo     slow-motion factor for the slowmo extra (default 3)      shots      [shot], or a folder of shot files
 //   pages      paths `rec scan` puts on the context sheet (default ["/"])
 // A shot: { id, feature, title, demonstrates, act({ page, d }), setup?, routes?, stage?, focus?, lead?, tail?,
 //   pad?, posterAtMs?, suggestedUse?, staged? } and any app fields `prepare` reads.
@@ -35,6 +36,8 @@ export async function loadConfig(file) {
   if (!existsSync(path)) throw new RecError(2, `no rec.config.mjs at ${path} (run rec in the app's folder or pass --config <file>)`);
   const c = (await importFile(path)).default ?? {};
   if (!c.url) throw new RecError(3, `${path}: url is required`);
+  const EXTRAS = ["focus", "slowmo"];
+  for (const x of c.extras ?? []) if (!EXTRAS.includes(x)) throw new RecError(3, `${path}: extras "${x}" is not a clip a take can add (valid: ${EXTRAS.join(", ")})`);
   const dir = dirname(path);
   const shots = typeof c.shots === "string" ? await shotFolder(resolve(dir, c.shots)) : c.shots ?? [];
   const seen = new Set();
@@ -74,6 +77,7 @@ export async function loadConfig(file) {
     console: c.console ? new RegExp(c.console) : null,
     python: c.python && c.python.includes("/") ? resolve(dir, c.python) : c.python,
     chrome: c.chrome,
+    extras: c.extras ?? [],
     slowmo: c.slowmo ?? 3,
     pages: c.pages ?? ["/"],
     shots,

@@ -40,7 +40,8 @@ export default {
 ```
 
 Per take, `<out>/effects/<id>/` holds:
-- `smart.mp4` (camera), `full.mp4` (the whole window), `focus.mp4` and `slowmo.mp4`
+- `smart.mp4` (camera) and `full.mp4` (the whole window); `focus.mp4` and `slowmo.mp4` too with config
+  `extras: ["focus", "slowmo"]`
 - `poster.png`, `timeline.json` and `captions.srt`
 - `<out>/manifest.json`, which says what each clip demonstrates
 
