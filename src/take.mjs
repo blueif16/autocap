@@ -39,6 +39,8 @@ function frame16x9(b, W, H, pad = 110) {
   return { x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) };
 }
 
+const sec = (ms) => (ms / 1000).toFixed(1);
+
 function union(boxes) {
   const x = Math.min(...boxes.map((b) => b.x)), y = Math.min(...boxes.map((b) => b.y));
   return { x, y, w: Math.max(...boxes.map((b) => b.x + b.w)) - x, h: Math.max(...boxes.map((b) => b.y + b.h)) - y };
@@ -95,13 +97,14 @@ export async function take(shot, cfg, { check = false } = {}) {
 
 async function captureOnce(shot, cfg, rate, check) {
   console.log(`● ${shot.id}`);
+  const t0 = performance.now();
   const { width: W, height: H, dpr } = cfg.viewport;
   const s = await launch({ width: W, height: H, dpr, chrome: cfg.chrome });
   const { page, browser } = s;
   if (check && cfg.console) page.on("console", (m) => cfg.console.test(m.text()) && console.log("  " + m.text()));
   page.setDefaultTimeout(8000 / (rate ?? 1)); // Playwright waits are wall-clock; the page runs rate× slower
   try {
-    return await captureIn(shot, cfg, s, rate, check);
+    return await captureIn(shot, cfg, s, rate, check, t0);
   } catch (e) {
     mkdirSync(join(cfg.out, ".debug"), { recursive: true });
     const shotPath = join(cfg.out, ".debug", `${shot.id}.png`);
@@ -113,7 +116,11 @@ async function captureOnce(shot, cfg, rate, check) {
   }
 }
 
-async function captureIn(shot, cfg, { page, cdp, browser }, rate, check) {
+async function captureIn(shot, cfg, { page, cdp, browser }, rate, check, t0) {
+  // Wall ms per stage, so a take reports where its time went.
+  const ms = {};
+  let last = t0;
+  const lap = (k) => { const t = performance.now(); ms[k] = Math.round(t - last); last = t; };
   const { width: W, height: H, dpr: DPR } = cfg.viewport;
   const stage = { ...cfg.stage, ...shot.stage };
   await installStage(page, stage);
@@ -140,6 +147,7 @@ async function captureIn(shot, cfg, { page, cdp, browser }, rate, check) {
     rate = d.rate = rateFor(await captureFps(cdp, { clip, scale: DPR }));
   }
   page.setDefaultTimeout(8000 / rate);
+  lap("setup");
   await setRate(page, cdp, rate);
   const dir = join(cfg.out, ".frames", shot.id);
   const rec = recorder(cdp, { dir, clip, scale: DPR });
@@ -152,6 +160,7 @@ async function captureIn(shot, cfg, { page, cdp, browser }, rate, check) {
     await d.wait(shot.tail ?? 900);
   } finally {
     frames = await rec.stop();
+    lap("capture");
   }
   if (check) {
     mkdirSync(join(cfg.out, ".debug"), { recursive: true });
@@ -170,9 +179,13 @@ async function captureIn(shot, cfg, { page, cdp, browser }, rate, check) {
   const crop = { x: focus.x * DPR, y: focus.y * DPR, w: focus.w * DPR, h: focus.h * DPR };
   const out = join(cfg.out, "effects", shot.id);
   mkdirSync(out, { recursive: true });
+  last = performance.now(); // the focus callback and closing Chrome belong to no stage
   encodeMp4(frames, join(out, "full.mp4"), { rate });
+  lap("full");
   encodeMp4(frames, join(out, "focus.mp4"), { rate, crop });
+  lap("focus");
   encodeMp4(frames, join(out, "slowmo.mp4"), { rate, crop, stretch: SLOW });
+  lap("slowmo");
   const payoff = shot.posterAtMs ?? (d.marks.at(-1)?.atMs ?? durationMs * 0.6) + 500;
   const pf = frames.reduce((best, f) => (Math.abs(f.wall * rate - payoff) < Math.abs(best.wall * rate - payoff) ? f : best), frames[0]);
   poster(pf.file, join(out, "poster.png"), crop);
@@ -182,7 +195,11 @@ async function captureIn(shot, cfg, { page, cdp, browser }, rate, check) {
   rmSync(join(out, "captions.srt"), { force: true });
   if (captions) writeFileSync(join(out, "captions.srt"), captions);
   rmSync(dir, { recursive: true, force: true });
+  last = performance.now();
   renderSmart(out, { python: cfg.python }); // smart.mp4: auto-zoom camera from the timeline's boxes and cursor
+  lap("render");
+  ms.total = Math.round(performance.now() - t0);
+  const frameMB = Math.round(frames.reduce((a, f) => a + f.bytes, 0) / 1e5) / 10;
 
   const capturedFps = Math.round(frames.length / (durationMs / 1000));
   const warnings = capturedFps < 60 * SLOW ? [`slowmo.mp4 repeats frames: ${capturedFps} fps of page time, ${60 * SLOW} needed for ${SLOW}x (REC_RATE=${(rate * capturedFps / (60 * SLOW)).toFixed(3)} gives that)`] : [];
@@ -208,6 +225,7 @@ async function captureIn(shot, cfg, { page, cdp, browser }, rate, check) {
     ...(warnings.length ? { warnings } : {}),
   }, cfg.features);
   console.log(`  ${frames.length} frames, ${capturedFps} fps of page time at ${rate.toFixed(3)}x page speed, ${(durationMs / 1000).toFixed(1)} s, focus ${focus.w}x${focus.h}`);
+  console.log(`  took ${(ms.total / 1000).toFixed(0)} s: setup ${sec(ms.setup)} · capture ${sec(ms.capture)} · encode ${sec(ms.full + ms.focus + ms.slowmo)} · render ${sec(ms.render)} (frames ${frameMB} MB)`);
   for (const w of warnings) console.log(`  ! ${w}`);
-  return { fps: capturedFps, rate: Number(rate.toFixed(3)), durationMs, dir: out, beats: d.marks.map((m) => m.what), ...(warnings.length ? { warnings } : {}) };
+  return { fps: capturedFps, rate: Number(rate.toFixed(3)), durationMs, dir: out, beats: d.marks.map((m) => m.what), ms, frameMB, ...(warnings.length ? { warnings } : {}) };
 }

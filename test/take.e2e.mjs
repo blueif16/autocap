@@ -100,3 +100,17 @@ test("a passing take prints where smart.mp4 is and the next command", () => {
   assert.ok(smart && existsSync(join(dir, smart)), r.stdout);
   assert.match(r.stdout, /next: rec look card\.pop/);
 });
+
+test("take --json says where the time went, stage by stage, and how big the frames were", () => {
+  const t0 = Date.now();
+  const r = run(app(), "take", "card.pop", "--json");
+  const wall = Date.now() - t0;
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  const [{ ms, frameMB }] = JSON.parse(r.stdout).results;
+  const stages = ["setup", "capture", "full", "focus", "slowmo", "render"];
+  for (const k of [...stages, "total"]) assert.ok(Number.isInteger(ms?.[k]) && ms[k] >= 0, `ms.${k}: ${JSON.stringify(ms)}`);
+  const sum = stages.reduce((a, k) => a + ms[k], 0);
+  assert.ok(sum <= ms.total && ms.total - sum < 2000, `stages ${sum} vs total ${ms.total}`);
+  assert.ok(ms.total <= wall, `total ${ms.total} > wall ${wall}`);
+  assert.ok(frameMB > 0, `frameMB ${frameMB}`);
+});

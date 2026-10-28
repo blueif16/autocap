@@ -79,8 +79,9 @@ export function recorder(cdp, { dir, clip, scale, alpha = false, quality = 93 })
         clip: { ...clip, scale },
       });
       const file = join(dir, `f${String(frames.length).padStart(5, "0")}.${alpha ? "png" : "jpg"}`);
-      frames.push({ file, wall: (t + performance.now()) / 2 - t0 });
-      writes.push(writeFile(file, Buffer.from(r.data, "base64")).catch((e) => { failed ??= e; }));
+      const buf = Buffer.from(r.data, "base64");
+      frames.push({ file, wall: (t + performance.now()) / 2 - t0, bytes: buf.length });
+      writes.push(writeFile(file, buf).catch((e) => { failed ??= e; }));
     }
   })();
   return {
