@@ -80,7 +80,8 @@ test("without REC_RATE, take paces the page to the capture speed: 60-200 fps of 
   const r = spawnSync(process.execPath, [REC, "take", "card.pop", "--json"], { cwd: dir, encoding: "utf8", env, timeout: 180000 });
   assert.equal(r.status, 0, r.stdout + r.stderr);
   const [res] = JSON.parse(r.stdout).results;
-  assert.ok(res.fps >= 60 && res.fps <= 200, `${res.fps} fps of page time at ${res.rate}x`);
+  // Above 200 is oversampling, unless the page already runs at 1x: it can't run faster than real time.
+  assert.ok(res.fps >= 60 && (res.fps <= 200 || res.rate === 1), `${res.fps} fps of page time at ${res.rate}x`);
   assert.ok(!res.warnings?.some((w) => /slowmo/.test(w)), "no slow-mo was asked for, so no slow-mo warning");
 });
 
