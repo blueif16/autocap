@@ -58,3 +58,11 @@ test("the renderer places a sub-pixel camera box exactly and pans smoothly", asy
   assert.ok(Math.max(...err) < 0.3, `max placement error ${Math.max(...err).toFixed(3)} px`);
   assert.ok(rms < 0.15, `second-difference RMS ${rms.toFixed(3)} px (whole-pixel steps)`);
 });
+
+test("a render whose encoder dies fails instead of waiting forever", { timeout: 60000 }, async () => {
+  const { renderBoxes } = await import("../src/camera.mjs");
+  const dir = take(2);
+  const boxes = Array.from({ length: 120 }, () => [0, 0, 320, 180]);
+  // the encoder can't open its output, so it exits while the renderer is still writing frames to it
+  await assert.rejects(renderBoxes(join(dir, "full.mp4"), join(dir, "no", "such", "dir", "smart.mp4"), { src: [320, 180], out: [1920, 1080], fps: 60, boxes }));
+});

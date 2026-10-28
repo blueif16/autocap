@@ -41,6 +41,9 @@ function frame16x9(b, W, H, pad = 110) {
 
 const sec = (ms) => (ms / 1000).toFixed(1);
 
+/** What the take is doing now, so an interrupted take can say where it stopped and clean up (commands/take.mjs). */
+export const progress = { shot: null, stage: null, frames: null, lock: null };
+
 function union(boxes) {
   const x = Math.min(...boxes.map((b) => b.x)), y = Math.min(...boxes.map((b) => b.y));
   return { x, y, w: Math.max(...boxes.map((b) => b.x + b.w)) - x, h: Math.max(...boxes.map((b) => b.y + b.h)) - y };
@@ -55,6 +58,7 @@ async function withRecordLock(out, fn) {
     try {
       mkdirSync(LOCK);
       writeFileSync(join(LOCK, "pid"), String(process.pid));
+      progress.lock = LOCK;
       break;
     } catch {
       const owner = Number(existsSync(join(LOCK, "pid")) ? readFileSync(join(LOCK, "pid"), "utf8") : 0);
@@ -69,6 +73,7 @@ async function withRecordLock(out, fn) {
     return await fn();
   } finally {
     rmSync(LOCK, { recursive: true, force: true });
+    progress.lock = null;
   }
 }
 
@@ -97,6 +102,7 @@ export async function take(shot, cfg, { check = false } = {}) {
 
 async function captureOnce(shot, cfg, rate, check) {
   console.log(`● ${shot.id}`);
+  Object.assign(progress, { shot: shot.id, stage: "launch" });
   const t0 = performance.now();
   const { width: W, height: H, dpr } = cfg.viewport;
   const s = await launch({ width: W, height: H, dpr, chrome: cfg.chrome });
@@ -125,11 +131,13 @@ async function captureIn(shot, cfg, { page, cdp, browser }, rate, check, t0) {
   const stage = { ...cfg.stage, ...shot.stage };
   await installStage(page, stage);
   await page.addInitScript(CSS, CLEAN_CSS + cfg.css);
+  progress.stage = "page load";
   await cfg.prepare?.({ page, shot });
   if (shot.routes) await shot.routes(page);
   await page.goto(shot.path ? new URL(shot.path, cfg.url).href : cfg.url, { waitUntil: "load", timeout: 90000 }); // a dev server may be compiling
   await page.waitForTimeout(1500);
   const start = { x: Math.round(W * 0.903), y: Math.round(H * 0.911) };
+  progress.stage = "setup";
   const d = new Director(page, rate, start);
   await d.place(start.x, start.y);
   if (Array.isArray(shot.setup)) {
@@ -141,6 +149,7 @@ async function captureIn(shot, cfg, { page, cdp, browser }, rate, check, t0) {
   if (!check) console.log("  setup done, recording");
 
   const clip = { x: 0, y: 0, width: W, height: H };
+  progress.stage = "calibrate";
   if (!rate) {
     // Measure on a slowed page: at full speed it is busier and screenshots come 1.3-2.3x slower than in the take.
     await setRate(page, cdp, 0.1);
@@ -150,6 +159,7 @@ async function captureIn(shot, cfg, { page, cdp, browser }, rate, check, t0) {
   lap("setup");
   await setRate(page, cdp, rate);
   const dir = join(cfg.out, ".frames", shot.id);
+  Object.assign(progress, { stage: "capture", frames: dir });
   const rec = recorder(cdp, { dir, clip, scale: DPR });
   d.start(rec);
   let frames;
@@ -179,6 +189,7 @@ async function captureIn(shot, cfg, { page, cdp, browser }, rate, check, t0) {
   const crop = { x: focus.x * DPR, y: focus.y * DPR, w: focus.w * DPR, h: focus.h * DPR };
   const out = join(cfg.out, "effects", shot.id);
   mkdirSync(out, { recursive: true });
+  progress.stage = "encode";
   last = performance.now(); // the focus callback and closing Chrome belong to no stage
   encodeMp4(frames, join(out, "full.mp4"), { rate });
   lap("full");
@@ -197,6 +208,7 @@ async function captureIn(shot, cfg, { page, cdp, browser }, rate, check, t0) {
   rmSync(join(out, "captions.srt"), { force: true });
   if (captions) writeFileSync(join(out, "captions.srt"), captions);
   rmSync(dir, { recursive: true, force: true });
+  progress.stage = "render";
   last = performance.now();
   await renderSmart(out); // smart.mp4: auto-zoom camera from the timeline's boxes and cursor
   lap("render");

@@ -1,3 +1,4 @@
+import { rmSync, writeSync } from "node:fs";
 import { join, relative } from "node:path";
 import { pickShots } from "../config.mjs";
 
@@ -9,7 +10,15 @@ const here = (p) => relative(process.cwd(), p) || ".";
 
 /** Shared by take and check: runs each shot, keeps going after a failure, exit 1 if any failed. */
 export async function runShots({ cfg, args, flags }, check) {
-  const { take } = await import("../take.mjs");
+  const { take, progress } = await import("../take.mjs");
+  // A harness timeout or Ctrl-C: say where the take was, and leave no frames or lock behind (finally blocks don't run).
+  // Registered before Playwright's own handler, whose exit hook still closes Chrome.
+  const stop = (sig) => {
+    writeSync(2, `\nrec: interrupted during ${progress.stage ?? "start"}${progress.shot ? ` of ${progress.shot}` : ""}\n`);
+    for (const p of [progress.frames, progress.lock]) if (p) rmSync(p, { recursive: true, force: true });
+    process.exit(sig === "SIGINT" ? 130 : 143);
+  };
+  process.once("SIGTERM", stop).once("SIGINT", stop);
   const shots = pickShots(cfg, args);
   if (!check) await (await import("./doctor.mjs")).preflight(cfg);
   const results = [];
