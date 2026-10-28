@@ -16,13 +16,13 @@ const PAGE = `<!doctype html><html><body style="margin:0;font:16px system-ui;bac
 <script>go.onclick = () => { card.style.display = "block"; card.animate([{ transform: "scale(.6)", opacity: 0 }, { transform: "scale(1)", opacity: 1 }], { duration: 300 }); };</script>
 </body></html>`;
 
-function app() {
+function app(more = "") {
   const dir = mkdtempSync(join(tmpdir(), "rec-take-"));
   writeFileSync(join(dir, "page.html"), PAGE);
   writeFileSync(join(dir, "rec.config.mjs"), `export default {
   url: ${JSON.stringify(pathToFileURL(join(dir, "page.html")).href)},
   out: "assets",
-  viewport: { width: 1280, height: 800, dpr: 1 },
+  viewport: { width: 1280, height: 800, dpr: 1 },${more}
   shots: [
     { id: "card.pop", feature: "cards", title: "Card pops in", demonstrates: "Clicking Go shows the card",
       async act({ page, d }) {
@@ -47,7 +47,8 @@ test("take records a shot of a plain page into clips, a timeline and a manifest 
   const r = run(dir, "take", "card.pop");
   assert.equal(r.status, 0, r.stdout + r.stderr);
   const out = join(dir, "assets", "effects", "card.pop");
-  for (const f of ["full.mp4", "focus.mp4", "slowmo.mp4", "smart.mp4", "poster.png"]) assert.ok(statSync(join(out, f)).size > 1000, `${f} is empty`);
+  for (const f of ["full.mp4", "smart.mp4", "poster.png"]) assert.ok(statSync(join(out, f)).size > 1000, `${f} is empty`);
+  for (const f of ["focus.mp4", "slowmo.mp4"]) assert.ok(!existsSync(join(out, f)), `${f} was written without extras`);
   const tl = JSON.parse(readFileSync(join(out, "timeline.json"), "utf8"));
   assert.deepEqual(tl.viewport, { w: 1280, h: 800, dpr: 1 });
   assert.deepEqual(tl.marks.map((m) => m.what), ["press Go", "card shown"]);
@@ -73,14 +74,14 @@ test("a take that fails mid-recording leaves no frames on disk", () => {
   assert.ok(!existsSync(join(dir, "assets", ".frames", "card.boom")), "frames left behind");
 });
 
-test("without REC_RATE, take paces the page to the capture speed: 60-200 fps of page time, and says when slow-mo repeats frames", () => {
+test("without REC_RATE, take paces the page to the capture speed: 60-200 fps of page time", () => {
   const dir = app();
   const { REC_RATE, ...env } = process.env;
   const r = spawnSync(process.execPath, [REC, "take", "card.pop", "--json"], { cwd: dir, encoding: "utf8", env, timeout: 180000 });
   assert.equal(r.status, 0, r.stdout + r.stderr);
   const [res] = JSON.parse(r.stdout).results;
   assert.ok(res.fps >= 60 && res.fps <= 200, `${res.fps} fps of page time at ${res.rate}x`);
-  if (res.fps < 180) assert.ok(res.warnings?.some((w) => /slowmo/.test(w)), JSON.stringify(res));
+  assert.ok(!res.warnings?.some((w) => /slowmo/.test(w)), "no slow-mo was asked for, so no slow-mo warning");
 });
 
 test("a failed check names its screenshot in text output and never claims to record", () => {
@@ -113,4 +114,14 @@ test("take --json says where the time went, stage by stage, and how big the fram
   assert.ok(sum <= ms.total && ms.total - sum < 2000, `stages ${sum} vs total ${ms.total}`);
   assert.ok(ms.total <= wall, `total ${ms.total} > wall ${wall}`);
   assert.ok(frameMB > 0, `frameMB ${frameMB}`);
+});
+
+test("extras focus and slowmo add those clips, and take says when slow-mo repeats frames", () => {
+  const dir = app(`\n  extras: ["focus", "slowmo"],`);
+  const r = run(dir, "take", "card.pop", "--json");
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  const [res] = JSON.parse(r.stdout).results;
+  const out = join(dir, "assets", "effects", "card.pop");
+  for (const f of ["focus.mp4", "slowmo.mp4"]) assert.ok(statSync(join(out, f)).size > 1000, `${f} is empty`);
+  if (res.fps < 180) assert.ok(res.warnings?.some((w) => /slowmo/.test(w)), JSON.stringify(res));
 });
