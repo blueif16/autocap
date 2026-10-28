@@ -29,7 +29,7 @@ valid list. `npx rec guide` lists its topics; `npx rec guide <topic>` prints onl
 5. **Find the pages.** `npx rec scan /route …` prints each page's screenshot and one sheet of what moves after load;
    read them. Then `npx rec check <id>` until it passes: it runs the shot at full speed and names the failing step,
    the target and the fix, with a screenshot.
-6. **Record.** `npx rec take <id>` (a 5 s clip takes about 2 minutes), then `npx rec look <id>` and read `look.png`.
+6. **Record.** `npx rec take <id>` (a 5 s clip takes about a minute), then `npx rec look <id>` and read `look.png`.
    Iterate until `ok` is true, then `npx rec cut <id> --as vertical,gif` for variants.
 
 The default camera zooms on each step's target. When the target is a small control and the viewer needs the card or
