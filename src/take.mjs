@@ -203,7 +203,7 @@ async function captureIn(shot, cfg, { page, cdp, browser }, rate, check, t0) {
   ms.total = Math.round(performance.now() - t0);
   const frameMB = Math.round(frames.reduce((a, f) => a + f.bytes, 0) / 1e5) / 10;
 
-  const capturedFps = Math.round(frames.length / (durationMs / 1000));
+  const capturedFps = Math.round(rec.shots / (durationMs / 1000)); // screenshots, repeats included: still stretches don't lower it
   const warnings = extra("slowmo") && capturedFps < 60 * SLOW ? [`slowmo.mp4 repeats frames: ${capturedFps} fps of page time, ${60 * SLOW} needed for ${SLOW}x (REC_RATE=${(rate * capturedFps / (60 * SLOW)).toFixed(3)} gives that)`] : [];
   const r = (p) => rel(cfg.out, p);
   addToManifest(cfg.out, {
