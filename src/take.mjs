@@ -131,7 +131,7 @@ async function captureIn(shot, cfg, { page, cdp, browser }, rate, check) {
     d.pos = sd.pos;
   } else await shot.setup?.({ page, d });
   await page.waitForTimeout(600);
-  console.log("  setup done, recording");
+  if (!check) console.log("  setup done, recording");
 
   const clip = { x: 0, y: 0, width: W, height: H };
   if (!rate) {

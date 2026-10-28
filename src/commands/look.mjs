@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, basename, extname } from "node:path";
 import { spawnSync } from "node:child_process";
 import { launch } from "../browser.mjs";
-import { RecError } from "../config.mjs";
+import { RecError, pickShots } from "../config.mjs";
 import { path as camPath, rect } from "../camera.mjs";
 
 export const usage = "look <shot> [--cut <file>] [--json]    contact sheet of a cut at each marked moment, whether the camera had the subject in frame, and any blank stretch";
@@ -64,9 +64,11 @@ function blankStretches(file) {
 }
 
 export async function run({ cfg, args, flags }) {
-  if (args.length !== 1) throw new RecError(2, "rec look takes exactly one shot id");
-  const shot = cfg.shots.find((s) => s.id === args[0]);
-  if (!shot) throw new RecError(2, `no shot ${args[0]}`);
+  if (args.length !== 1) throw new RecError(2, "rec look takes one shot id", `rec look ${cfg.shots[0]?.id ?? "<id>"} (shots: rec ls)`);
+  const exact = cfg.shots.find((s) => s.id === args[0]);
+  const matches = exact ? [exact] : pickShots(cfg, args);
+  if (matches.length > 1) throw new RecError(2, `"${args[0]}" names ${matches.length} shots: ${matches.map((s) => s.id).join(", ")}`, `rec look ${matches[0].id}`);
+  const [shot] = matches;
   const dir = join(cfg.out, "effects", shot.id);
   const tlFile = join(dir, "timeline.json");
   if (!existsSync(tlFile)) throw new RecError(2, `no take for ${shot.id}; run rec take ${shot.id}`);

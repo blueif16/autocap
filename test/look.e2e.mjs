@@ -90,3 +90,15 @@ test("look finds no blank stretch in a cut that always shows something", () => {
   assert.deepEqual(out.blank, []);
   assert.ok(out.moments.every((m) => m.blank === false));
 });
+
+test("look takes an id prefix that names one shot, like every other command", () => {
+  const r = look(take(), "demo.fr", "--json");
+  assert.equal(JSON.parse(r.stdout).shot, "demo.frame", r.stderr);
+});
+
+test("look with a prefix that names several shots exits 2 and lists them", () => {
+  const r = look(take(), "demo");
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /demo\.frame/);
+  assert.match(r.stderr, /demo\.none/);
+});

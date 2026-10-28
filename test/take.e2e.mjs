@@ -4,7 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, readFileSync, statSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
@@ -81,4 +81,22 @@ test("without REC_RATE, take paces the page to the capture speed: 60-200 fps of 
   const [res] = JSON.parse(r.stdout).results;
   assert.ok(res.fps >= 60 && res.fps <= 200, `${res.fps} fps of page time at ${res.rate}x`);
   if (res.fps < 180) assert.ok(res.warnings?.some((w) => /slowmo/.test(w)), JSON.stringify(res));
+});
+
+test("a failed check names its screenshot in text output and never claims to record", () => {
+  const dir = app();
+  const r = run(dir, "check", "card.missing");
+  assert.equal(r.status, 1);
+  const shot = r.stderr.match(/screenshot: (\S+card\.missing\.png)/)?.[1];
+  assert.ok(shot && existsSync(resolve(dir, shot)), r.stdout + r.stderr);
+  assert.doesNotMatch(r.stdout + r.stderr, /recording/);
+});
+
+test("a passing take prints where smart.mp4 is and the next command", () => {
+  const dir = app();
+  const r = run(dir, "take", "card.pop");
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  const smart = r.stdout.match(/smart: (\S+smart\.mp4)/)?.[1];
+  assert.ok(smart && existsSync(join(dir, smart)), r.stdout);
+  assert.match(r.stdout, /next: rec look card\.pop/);
 });
