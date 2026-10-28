@@ -3,6 +3,7 @@
 import { VERBS, COMMON, CAM, FRAME, verbOf } from "./vocab.mjs";
 import { toLocator } from "./target.mjs";
 import { rule, emit } from "./stage.mjs";
+import { open } from "./browser.mjs";
 
 /** A step failed: `step` = { step, verb, target? } so an agent knows exactly which line of the shot to fix. */
 export class StepError extends Error {
@@ -158,7 +159,7 @@ const framed = async (st, loc, b) => (st.frame === "container" ? loc.evaluate(CO
 
 const DO = {
   async goto(v, st, ctx, i) {
-    await ctx.page.goto(new URL(v, ctx.cfg.url).href, { waitUntil: "load" });
+    await open(ctx.page, new URL(v, ctx.cfg.url).href, 8000 / ctx.d.rate);
     await ctx.page.mouse.move(ctx.d.pos.x, ctx.d.pos.y); // the staged cursor reappears on the new page
     record(ctx, i, "goto", st, null);
   },

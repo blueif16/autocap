@@ -8,7 +8,7 @@
 // and an entry in <out>/manifest.json saying what it shows and why (feature, demonstrates, moments).
 import { mkdirSync, writeFileSync, rmSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { launch, setRate, recorder, captureFps, CLEAN_CSS } from "./browser.mjs";
+import { launch, open, snapshot, setRate, recorder, captureFps, CLEAN_CSS } from "./browser.mjs";
 import { encodeMp4, poster } from "./encode.mjs";
 import { installStage } from "./stage.mjs";
 import { Director } from "./director.mjs";
@@ -114,7 +114,7 @@ async function captureOnce(shot, cfg, rate, check) {
   } catch (e) {
     mkdirSync(join(cfg.out, ".debug"), { recursive: true });
     const shotPath = join(cfg.out, ".debug", `${shot.id}.png`);
-    if (await page.screenshot({ path: shotPath }).then(() => true, () => false)) e.screenshot = shotPath;
+    if (await snapshot(s.cdp, shotPath, { x: 0, y: 0, width: W, height: H }).then(() => true, () => false)) e.screenshot = shotPath;
     throw e;
   } finally {
     await browser.close().catch(() => {});
@@ -134,7 +134,7 @@ async function captureIn(shot, cfg, { page, cdp, browser }, rate, check, t0) {
   progress.stage = "page load";
   await cfg.prepare?.({ page, shot });
   if (shot.routes) await shot.routes(page);
-  await page.goto(shot.path ? new URL(shot.path, cfg.url).href : cfg.url, { waitUntil: "load", timeout: 90000 }); // a dev server may be compiling
+  await open(page, shot.path ? new URL(shot.path, cfg.url).href : cfg.url); // up to 90 s: a dev server may be compiling
   await page.waitForTimeout(1500);
   const start = { x: Math.round(W * 0.903), y: Math.round(H * 0.911) };
   progress.stage = "setup";
@@ -174,7 +174,7 @@ async function captureIn(shot, cfg, { page, cdp, browser }, rate, check, t0) {
   }
   if (check) {
     mkdirSync(join(cfg.out, ".debug"), { recursive: true });
-    await page.screenshot({ path: join(cfg.out, ".debug", `${shot.id}.png`) });
+    await snapshot(cdp, join(cfg.out, ".debug", `${shot.id}.png`), { x: 0, y: 0, width: W, height: H });
     rmSync(dir, { recursive: true, force: true });
     console.log("  check: marks", JSON.stringify(d.marks.map((m) => m.what)));
     return { beats: d.marks.map((m) => m.what), steps: d.events.length, screenshot: join(cfg.out, ".debug", `${shot.id}.png`) };
