@@ -22,6 +22,7 @@ export const COMMON = {
   cam: "camera for this step (see CAM.step)",
   zoom: "zoom level for this step, e.g. 1.8 (implies cam zoom)",
   region: "{ x, y, w, h } CSS px: frame this area instead of the target",
+  frame: 'what the camera frames: "target" (default) or "container": the card, panel, row or dialog around it, so the result shows too',
   say: "caption text from this step on (captions.srt)",
   ms: "cursor travel time in ms (default 450)",
   optional: "true: skip the step if its target is missing instead of failing the shot",
@@ -90,6 +91,7 @@ export const INTENTS = [
   ["don't move for this step", 'step cam: "hold"'],
   ["slide sideways at the same zoom", 'step cam: "pan"'],
   ["hard cut instead of a move", 'step cam: "cut"'],
+  ["show a small control together with the card or panel it changes", 'step frame: "container"'],
   ["frame an area, not an element (e.g. a target and its result)", "step region: { x, y, w, h } (CSS px)"],
   ["a result appears with no click (card lands, status flips)", '{ see: "<target>", beat: "…" }'],
 ];
@@ -106,6 +108,9 @@ export const TOPICS = {
   commands: "every command and its flags",
   exit: "exit codes",
 };
+
+/** Values of the step option `frame`. */
+export const FRAME = ["target", "container"];
 
 export const verbOf = (step) => Object.keys(step).filter((k) => k in VERBS);
 

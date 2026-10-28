@@ -25,3 +25,9 @@ test("a target that matches several elements comes back with unique targets to u
 test("a step error stays on one line", () => {
   assert.doesNotMatch(new StepError(1, "click", "text=Argon", new Error(STRICT)).message, /\n/);
 });
+
+test("frame takes target or container, and anything else is rejected with the valid values", async () => {
+  const { validateSteps } = await import("../src/steps.mjs");
+  validateSteps([{ click: "#a", frame: "container" }, { see: "#b", frame: "target" }]);
+  assert.throws(() => validateSteps([{ click: "#a", frame: "parent" }]), /frame "parent".*target, container/);
+});

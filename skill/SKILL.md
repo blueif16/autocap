@@ -32,8 +32,9 @@ valid list. `npx rec guide` lists its topics; `npx rec guide <topic>` prints onl
 6. **Record.** `npx rec take <id>` (a 5 s clip takes about 2 minutes), then `npx rec look <id>` and read `look.png`.
    Iterate until `ok` is true, then `npx rec cut <id> --as vertical,gif` for variants.
 
-The default camera zooms on each step's target. For anything else (beats only, stay wide, follow, a softer zoom, a
-region) run `rec guide cam`: it maps what you want to what you write.
+The default camera zooms on each step's target. When the target is a small control and the viewer needs the card or
+panel it sits in, add `frame: "container"` to the step. For anything else (beats only, stay wide, follow, a softer
+zoom, a region) run `rec guide cam`: it maps what you want to what you write.
 
 ## Rules
 - **One target, one element.** If a target matches several elements, `check` lists unique targets for them; use

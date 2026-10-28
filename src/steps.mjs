@@ -1,6 +1,6 @@
 // Runs a shot's steps (vocabulary in vocab.mjs). Every step logs an event { i, verb, atMs, box?, cam?, zoom?,
 // region?, say?, beat? } on the Director: the camera frames boxes, beats become manifest moments, say becomes captions.
-import { VERBS, COMMON, CAM, verbOf } from "./vocab.mjs";
+import { VERBS, COMMON, CAM, FRAME, verbOf } from "./vocab.mjs";
 import { toLocator } from "./target.mjs";
 import { rule, emit } from "./stage.mjs";
 
@@ -68,6 +68,7 @@ export function validateSteps(steps, where = "") {
     if (st.cam !== undefined && !(st.cam in CAM.step)) throw new Error(`${at}: cam "${st.cam}" is not a camera mode (valid: ${Object.keys(CAM.step).join(", ")})`);
     if (st.zoom !== undefined && !(typeof st.zoom === "number" && st.zoom >= 1)) throw new Error(`${at}: zoom is a level ≥ 1, e.g. 1.8`);
     if (st.region !== undefined && !["x", "y", "w", "h"].every((k) => typeof st.region?.[k] === "number")) throw new Error(`${at}: region is { x, y, w, h } in CSS px`);
+    if (st.frame !== undefined && !FRAME.includes(st.frame)) throw new Error(`${at}: frame "${st.frame}" is not a framing (valid: ${FRAME.join(", ")})`);
     if ((verb === "drag" && !st.to) || (verb === "select" && st.value === undefined)) throw new Error(`${at}: ${verb} needs ${verb === "drag" ? "to" : "value"}`);
   });
 }
@@ -87,7 +88,7 @@ export async function runSteps(steps, ctx) {
 function record({ d }, i, verb, st, box) {
   const atMs = Math.round(d.clock());
   const e = { i, verb, atMs, ...(box ? { box } : {}) };
-  for (const k of ["cam", "zoom", "region", "say", "beat"]) if (st[k] !== undefined) e[k] = st[k];
+  for (const k of ["cam", "zoom", "region", "frame", "say", "beat"]) if (st[k] !== undefined) e[k] = st[k];
   d.events.push(e);
   if (st.beat) d.mark(st.beat, st.region ?? box, atMs);
 }
@@ -136,6 +137,25 @@ const glide = (ctx, loc, { by, ms = 650 }) => (loc ?? ctx.page.locator("html")).
 
 const box = (d, loc) => d.box(loc);
 
+// frame: "container": the dialog around the target, else the first ancestor big enough to read (360x200 CSS px),
+// stopping below anything that covers most of the page. A small group (a row of pills) is not enough context.
+const CONTAINER = (el) => {
+  const page = innerWidth * innerHeight;
+  const dialog = (n) => n.tagName === "DIALOG" || /^(dialog|alertdialog)$/.test(n.getAttribute("role") ?? "");
+  let n = el;
+  while (n.parentElement && n.parentElement !== document.body && !dialog(n)) {
+    const r = n.parentElement.getBoundingClientRect();
+    if (r.width * r.height >= 0.9 * page) break;
+    n = n.parentElement;
+    if (dialog(n) || (r.width >= 360 && r.height >= 200)) break;
+  }
+  const r = n.getBoundingClientRect();
+  return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) };
+};
+
+/** The box the camera frames for a step: the target's own, or its container's when the step says frame: "container". */
+const framed = async (st, loc, b) => (st.frame === "container" ? loc.evaluate(CONTAINER) : b);
+
 const DO = {
   async goto(v, st, ctx, i) {
     await ctx.page.goto(new URL(v, ctx.cfg.url).href, { waitUntil: "load" });
@@ -147,13 +167,13 @@ const DO = {
     if (!loc) return skip(ctx, i, "click");
     const b = await ctx.d.hover(loc, { ms: st.ms ?? 450 });
     await ctx.d.wait(140);
-    record(ctx, i, "click", st, b);
+    record(ctx, i, "click", st, await framed(st, loc, b));
     await ctx.d.press({ button: st.button, double: st.double });
   },
   async hover(v, st, ctx, i) {
     const loc = await find(ctx, v, st);
     if (!loc) return skip(ctx, i, "hover");
-    record(ctx, i, "hover", st, await ctx.d.hover(loc, { ms: st.ms ?? 450 }));
+    record(ctx, i, "hover", st, await framed(st, loc, await ctx.d.hover(loc, { ms: st.ms ?? 450 })));
   },
   async type(v, st, ctx, i) {
     const { page, d } = ctx;
@@ -161,7 +181,7 @@ const DO = {
     if (st.into) {
       const loc = await find(ctx, st.into, st);
       if (!loc) return skip(ctx, i, "type");
-      b = await d.hover(loc, { ms: st.ms ?? 450 });
+      b = await framed(st, loc, await d.hover(loc, { ms: st.ms ?? 450 }));
       await d.wait(120);
       await d.press({});
     } else b = await page.evaluate(() => { const r = document.activeElement?.getBoundingClientRect(); return r && r.width ? { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) } : null; });
@@ -185,7 +205,7 @@ const DO = {
     const loc = toLocator(ctx.page, v);
     await loc.waitFor({ state: "attached" });
     await glide(ctx, loc, {});
-    record(ctx, i, "scroll", st, await box(ctx.d, loc));
+    record(ctx, i, "scroll", st, await framed(st, loc, await box(ctx.d, loc)));
   },
   async drag(v, st, ctx, i) {
     const { page, d } = ctx;
@@ -207,7 +227,7 @@ const DO = {
     if (!loc) return skip(ctx, i, "select");
     const b = await ctx.d.hover(loc, { ms: st.ms ?? 450 });
     await ctx.d.wait(140);
-    record(ctx, i, "select", st, b);
+    record(ctx, i, "select", st, await framed(st, loc, b));
     await loc.selectOption(String(st.value));
   },
   async wait(v, st, ctx, i) {
@@ -218,7 +238,7 @@ const DO = {
     const loc = toLocator(ctx.page, v);
     await loc.waitFor({ state: "visible", ...(st.timeout ? { timeout: st.timeout / ctx.d.rate } : {}) });
     const seen = await find(ctx, v, {});
-    record(ctx, i, "see", st, await box(ctx.d, seen));
+    record(ctx, i, "see", st, await framed(st, seen, await box(ctx.d, seen)));
   },
   async emit(v, st, ctx, i) {
     record(ctx, i, "emit", st, null);
