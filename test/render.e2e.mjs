@@ -1,4 +1,4 @@
-// The camera renderer (ffmpeg + Python/Pillow, no Chrome): a render that didn't produce the clip must not pass.
+// The camera renderer (ffmpeg + sharp, no Chrome): a render that didn't produce the clip must not pass.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync } from "node:fs";
@@ -17,16 +17,16 @@ function take(sourceSeconds) {
   return dir;
 }
 
-test("a render whose source clip is missing fails", () => {
-  assert.throws(() => render(take(0)));
+test("a render whose source clip is missing fails", async () => {
+  await assert.rejects(render(take(0)));
 });
 
-test("a render whose source is far shorter than its timeline fails instead of writing a short clip", () => {
-  assert.throws(() => render(take(0.2)));
+test("a render whose source is far shorter than its timeline fails instead of writing a short clip", async () => {
+  await assert.rejects(render(take(0.2)));
 });
 
-test("a render of a whole source succeeds", () => {
-  assert.match(render(take(2)), /smart\.mp4$/);
+test("a render of a whole source succeeds", async () => {
+  assert.match(await render(take(2)), /smart\.mp4$/);
 });
 
 // A 4 px white line at x = 1000.5 (source px) on grey, the camera panning 0.07 px per frame at 1.5x zoom: in the
@@ -40,7 +40,7 @@ test("the renderer places a sub-pixel camera box exactly and pans smoothly", asy
   assert.equal(ff.status, 0, String(ff.stderr));
   const bw = SW / 1.5; // a 16:9 box at 1.5x zoom
   const boxes = Array.from({ length: N }, (_, i) => [600 + i * 0.07, 300, bw, (bw * 9) / 16]);
-  const out = renderBoxes(join(dir, "full.mp4"), join(dir, "smart.mp4"), { src: [SW, SH], out: [1920, 1080], fps: 60, boxes });
+  const out = await renderBoxes(join(dir, "full.mp4"), join(dir, "smart.mp4"), { src: [SW, SH], out: [1920, 1080], fps: 60, boxes });
   const raw = spawnSync("ffmpeg", ["-v", "error", "-i", out, "-vf", "crop=1920:4:0:540,format=gray", "-f", "rawvideo", "-"], { maxBuffer: 1 << 26 }).stdout;
   const row = 1920 * 4;
   const xs = [];
