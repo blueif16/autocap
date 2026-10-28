@@ -11,7 +11,7 @@ const here = (p) => relative(process.cwd(), p) || ".";
 export async function runShots({ cfg, args, flags }, check) {
   const { take } = await import("../take.mjs");
   const shots = pickShots(cfg, args);
-  if (!check) (await import("./doctor.mjs")).preflight(cfg);
+  if (!check) await (await import("./doctor.mjs")).preflight(cfg);
   const results = [];
   for (const s of shots) {
     try {

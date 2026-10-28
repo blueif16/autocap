@@ -5,7 +5,7 @@
 //   features   { key: description }: when given, every shot's `feature` must be a key
 //   prepare({ page, shot })  app init scripts, run after the stage is installed and before the page loads
 //   console    regex: page console lines echoed during `rec check`
-//   python     interpreter with Pillow for the camera renderer   chrome  Chrome executable
+//   chrome     Chrome executable
 //   extras     ["focus", "slowmo"]: clips a take also writes (default none: smart.mp4, full.mp4, poster, timeline)
 //   slowmo     slow-motion factor for the slowmo extra (default 3)      shots      [shot], or a folder of shot files
 //   pages      paths `rec scan` puts on the context sheet (default ["/"])
@@ -75,7 +75,6 @@ export async function loadConfig(file) {
     features: c.features ?? null,
     prepare: c.prepare,
     console: c.console ? new RegExp(c.console) : null,
-    python: c.python && c.python.includes("/") ? resolve(dir, c.python) : c.python,
     chrome: c.chrome,
     extras: c.extras ?? [],
     slowmo: c.slowmo ?? 3,

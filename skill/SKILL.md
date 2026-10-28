@@ -11,7 +11,7 @@ blank stretch) and gives you one contact-sheet image. The vocabulary is fixed an
 valid list. `npx rec guide` lists its topics; `npx rec guide <topic>` prints only that part.
 
 ## Setup (once per app)
-1. `npm i -D github:blueif16/autocap` (needs Google Chrome, ffmpeg, and uv or a Python with Pillow).
+1. `npm i -D github:blueif16/autocap` (needs Google Chrome and ffmpeg).
 2. `npx rec init <app url>`: writes `rec.config.mjs` and `rec/shots/first.mjs`. Start the app.
 3. `npx rec doctor`: fix every ✗ with its `fix:` line. `!` lines are warnings.
 

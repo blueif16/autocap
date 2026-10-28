@@ -4,7 +4,8 @@
 // The plan: a keyframe per marked box (framed with padding, zoom ≤ MAX_ZOOM), arriving shortly before the moment;
 // far jumps go out-then-in; the cursor is kept in frame; the whole path runs through a spring so it feels physical.
 import { readFileSync, writeFileSync, rmSync } from "node:fs";
-import { execFileSync, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
+import sharp from "sharp";
 import { join } from "node:path";
 
 const FPS = 60;
@@ -190,41 +191,99 @@ export function path(tl, opts = {}) {
   return out;
 }
 
-const RENDERER = join(import.meta.dirname, "camera_render.py");
+const SIZE = { "16:9": [1920, 1080], "9:16": [1080, 1920], "1:1": [1080, 1080] };
 
-/** The Python that runs the renderer (needs Pillow): config `python`, else $REC_PYTHON, else uv with Pillow, else python3. */
-function python(explicit) {
-  if (explicit) return [explicit];
-  if (process.env.REC_PYTHON) return [process.env.REC_PYTHON];
-  if (spawnSync("uv", ["--version"]).status === 0) return ["uv", "run", "--no-project", "--quiet", "--with", "pillow", "python"];
-  return ["python3"];
+sharp.cache(false); // every frame is new: libvips' operation cache would only hold 15 MB inputs
+
+/** Yields `size`-byte chunks of a stream in one reused buffer (the consumer is done with it before the next). */
+async function* chunks(stream, size) {
+  const buf = Buffer.allocUnsafe(size);
+  let have = 0;
+  for await (const data of stream) {
+    for (let off = 0; off < data.length; ) {
+      const n = Math.min(size - have, data.length - off);
+      data.copy(buf, have, off, off + n);
+      have += n, off += n;
+      if (have === size) yield buf, (have = 0);
+    }
+  }
 }
 
-const SIZE = { "16:9": [1920, 1080], "9:16": [1080, 1920], "1:1": [1080, 1080] };
+// Bicubic reads 2 px around each sample: the crop keeps M px of margin, copied from the edge where it runs past the
+// frame. (sharp's own extend runs after affine, so it can't supply this; measured.)
+const M = 3;
+
+/** Rows l…l+cw × t…t+ch of an RGB frame, repeating edge pixels where the crop runs past the frame. */
+function padCrop(frame, SW, SH, l, t, cw, ch) {
+  const out = Buffer.allocUnsafe(cw * ch * 3), x0 = Math.max(0, l), x1 = Math.min(SW, l + cw);
+  for (let r = 0; r < ch; r++) {
+    const src = Math.min(SH - 1, Math.max(0, t + r)) * SW, dst = r * cw * 3;
+    frame.copy(out, dst + (x0 - l) * 3, (src + x0) * 3, (src + x1) * 3);
+    for (let c = 0; c < x0 - l; c++) frame.copy(out, dst + c * 3, src * 3, src * 3 + 3);
+    for (let c = x1 - l; c < cw; c++) frame.copy(out, dst + c * 3, (src + SW - 1) * 3, (src + SW) * 3);
+  }
+  return out;
+}
+
+const exited = (p, err) => new Promise((r) => p.on("close", (code) => r(code)).stderr.on("data", (d) => err.push(d)));
+
+/**
+ * Crops each frame of `src` to its box (source px, floats: sub-pixel), scales it to cam.out and encodes `out`.
+ * cam = { src: [w, h], out: [w, h], fps, boxes: [[x, y, w, h], …] }, one box per output frame.
+ * ffmpeg decodes and encodes (x264 crf 15, as before); sharp crops on whole pixels and places the fraction with an
+ * affine transform, so slow zooms don't step.
+ */
+export async function renderBoxes(src, out, cam) {
+  const [SW, SH] = cam.src, [OW, OH] = cam.out, err = [];
+  const dec = spawn("ffmpeg", ["-loglevel", "error", "-i", src, "-f", "rawvideo", "-pix_fmt", "rgb24", "-"], { stdio: ["ignore", "pipe", "pipe"] });
+  const enc = spawn("ffmpeg", ["-loglevel", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", `${OW}x${OH}`, "-r", String(cam.fps), "-i", "-",
+    "-c:v", "libx264", "-preset", "medium", "-crf", "15", "-pix_fmt", "yuv420p", "-movflags", "+faststart", out], { stdio: ["pipe", "ignore", "pipe"] });
+  const done = Promise.all([exited(dec, err), exited(enc, err)]);
+  enc.stdin.on("error", () => {}); // an encoder that died is reported by its exit code below
+  const row = OW * 3;
+  let n = 0;
+  try {
+    for await (const frame of chunks(dec.stdout, SW * SH * 3)) {
+      const [x, y, w, h] = cam.boxes[Math.min(n, cam.boxes.length - 1)];
+      const s = OW / w, l = Math.floor(x) - M, t = Math.floor(y) - M, cw = Math.ceil(x + w) + M - l, ch = Math.ceil(y + h) + M - t;
+      const { data, info } = await sharp(padCrop(frame, SW, SH, l, t, cw, ch), { raw: { width: cw, height: ch, channels: 3 } })
+        // libvips maps pixel indexes; the half-pixel term makes pixel i cover [i, i+1) on both sides, like the camera
+        .affine([s, 0, 0, s], { idx: l - x, idy: t - y, odx: s / 2 - 0.5, ody: s / 2 - 0.5, interpolator: sharp.interpolators.bicubic })
+        .raw().toBuffer({ resolveWithObject: true });
+      if (info.width < OW || info.height < OH) throw new Error(`renderer: ${info.width}x${info.height} is smaller than ${OW}x${OH}`);
+      const img = Buffer.allocUnsafe(OH * row); // its own buffer: the pipe may still hold the previous frame
+      for (let r = 0; r < OH; r++) data.copy(img, r * row, r * info.width * 3, r * info.width * 3 + row); // top-left OW×OH
+      if (!enc.stdin.write(img)) await new Promise((r) => enc.stdin.once("drain", r));
+      n++;
+    }
+  } catch (e) {
+    dec.kill(), enc.kill();
+    rmSync(out, { force: true });
+    throw e;
+  }
+  enc.stdin.end();
+  const [d, e] = await done;
+  // A missing or cut-short source (e.g. the disk filled while encoding full.mp4) must fail, not leave a short clip.
+  if (d !== 0 || e !== 0 || n < 0.9 * cam.boxes.length) {
+    rmSync(out, { force: true });
+    throw new Error(`the camera render of ${out} failed: ${n} of ${cam.boxes.length} frames (decoder exit ${d}, encoder exit ${e}) ${Buffer.concat(err).toString().trim()}`);
+  }
+  return out;
+}
 
 /**
  * Renders a cut of <dir>/full.mp4 driven by <dir>/timeline.json; returns its path.
  * aspect "16:9" | "9:16" | "1:1"; cam overrides the shot's camera settings (e.g. { auto: "off" }); name the output file.
  */
-export function render(dir, { python: py, aspect = "16:9", cam, name = "smart.mp4" } = {}) {
+export async function render(dir, { aspect = "16:9", cam, name = "smart.mp4" } = {}) {
   const tl = JSON.parse(readFileSync(join(dir, "timeline.json"), "utf8"));
   const dpr = tl.viewport.dpr, ar = ratio(aspect);
   const boxes = path(tl, { aspect, cam }).map((c) => {
     const w = c.w * dpr, h = hOf(c.w, ar) * dpr;
     return [(c.cx * dpr) - w / 2, (c.cy * dpr) - h / 2, w, h].map((v) => Math.round(v * 100) / 100);
   });
-  const camFile = join(dir, `.camera-${process.pid}.json`);
-  writeFileSync(camFile, JSON.stringify({ src: [tl.viewport.w * dpr, tl.viewport.h * dpr], out: SIZE[aspect] ?? SIZE["16:9"], fps: FPS, boxes }));
-  const [cmd, ...args] = python(py);
   const out = join(dir, name);
-  try {
-    execFileSync(cmd, [...args, RENDERER, join(dir, "full.mp4"), out, camFile], { stdio: ["ignore", "ignore", "inherit"] });
-  } catch (e) {
-    rmSync(out, { force: true }); // never leave a partial cut where look would read it
-    throw new Error(`the camera render of ${out} failed (see above)`);
-  } finally {
-    rmSync(camFile, { force: true });
-  }
+  await renderBoxes(join(dir, "full.mp4"), out, { src: [tl.viewport.w * dpr, tl.viewport.h * dpr], out: SIZE[aspect] ?? SIZE["16:9"], fps: FPS, boxes });
   // How this cut was made, so `rec look` can rebuild the camera path for it.
   writeFileSync(out.replace(/\.mp4$/, ".cut.json"), JSON.stringify({ file: name, aspect, cam: camSettings(tl, cam), size: SIZE[aspect] ?? SIZE["16:9"] }, null, 1));
   return out;

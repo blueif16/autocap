@@ -198,7 +198,7 @@ async function captureIn(shot, cfg, { page, cdp, browser }, rate, check, t0) {
   if (captions) writeFileSync(join(out, "captions.srt"), captions);
   rmSync(dir, { recursive: true, force: true });
   last = performance.now();
-  renderSmart(out, { python: cfg.python }); // smart.mp4: auto-zoom camera from the timeline's boxes and cursor
+  await renderSmart(out); // smart.mp4: auto-zoom camera from the timeline's boxes and cursor
   lap("render");
   ms.total = Math.round(performance.now() - t0);
   const frameMB = Math.round(frames.reduce((a, f) => a + f.bytes, 0) / 1e5) / 10;
