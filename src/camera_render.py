@@ -21,5 +21,8 @@ while True:
     out = frame.transform((OW, OH), Image.Transform.EXTENT, (x, y, x + w, y + h), resample=Image.Resampling.BICUBIC)
     enc.stdin.write(out.tobytes())
     i += 1
-enc.stdin.close(); enc.wait(); dec.wait()
+enc.stdin.close(); e = enc.wait(); d = dec.wait()
+# A missing or cut-short source (e.g. the disk filled while encoding full.mp4) must fail, not leave a short clip.
+if d != 0 or e != 0 or i < 0.9 * len(boxes):
+    sys.exit(f"camera_render: rendered {i} of {len(boxes)} frames from {src} (decoder exit {d}, encoder exit {e})")
 print(i)

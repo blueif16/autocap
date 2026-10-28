@@ -219,6 +219,9 @@ export function render(dir, { python: py, aspect = "16:9", cam, name = "smart.mp
   const out = join(dir, name);
   try {
     execFileSync(cmd, [...args, RENDERER, join(dir, "full.mp4"), out, camFile], { stdio: ["ignore", "ignore", "inherit"] });
+  } catch (e) {
+    rmSync(out, { force: true }); // never leave a partial cut where look would read it
+    throw new Error(`the camera render of ${out} failed (see above)`);
   } finally {
     rmSync(camFile, { force: true });
   }
