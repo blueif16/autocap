@@ -203,6 +203,25 @@ function python(explicit) {
 const SIZE = { "16:9": [1920, 1080], "9:16": [1080, 1920], "1:1": [1080, 1080] };
 
 /**
+ * Crops each frame of `src` to its box (source px, floats: sub-pixel), scales it to cam.out and encodes `out`.
+ * cam = { src: [w, h], out: [w, h], fps, boxes: [[x, y, w, h], …] }, one box per output frame.
+ */
+export function renderBoxes(src, out, cam, { python: py } = {}) {
+  const camFile = `${out}.camera-${process.pid}.json`;
+  writeFileSync(camFile, JSON.stringify(cam));
+  const [cmd, ...args] = python(py);
+  try {
+    execFileSync(cmd, [...args, RENDERER, src, out, camFile], { stdio: ["ignore", "ignore", "inherit"] });
+  } catch (e) {
+    rmSync(out, { force: true }); // never leave a partial cut where look would read it
+    throw new Error(`the camera render of ${out} failed (see above)`);
+  } finally {
+    rmSync(camFile, { force: true });
+  }
+  return out;
+}
+
+/**
  * Renders a cut of <dir>/full.mp4 driven by <dir>/timeline.json; returns its path.
  * aspect "16:9" | "9:16" | "1:1"; cam overrides the shot's camera settings (e.g. { auto: "off" }); name the output file.
  */
@@ -213,18 +232,8 @@ export function render(dir, { python: py, aspect = "16:9", cam, name = "smart.mp
     const w = c.w * dpr, h = hOf(c.w, ar) * dpr;
     return [(c.cx * dpr) - w / 2, (c.cy * dpr) - h / 2, w, h].map((v) => Math.round(v * 100) / 100);
   });
-  const camFile = join(dir, `.camera-${process.pid}.json`);
-  writeFileSync(camFile, JSON.stringify({ src: [tl.viewport.w * dpr, tl.viewport.h * dpr], out: SIZE[aspect] ?? SIZE["16:9"], fps: FPS, boxes }));
-  const [cmd, ...args] = python(py);
   const out = join(dir, name);
-  try {
-    execFileSync(cmd, [...args, RENDERER, join(dir, "full.mp4"), out, camFile], { stdio: ["ignore", "ignore", "inherit"] });
-  } catch (e) {
-    rmSync(out, { force: true }); // never leave a partial cut where look would read it
-    throw new Error(`the camera render of ${out} failed (see above)`);
-  } finally {
-    rmSync(camFile, { force: true });
-  }
+  renderBoxes(join(dir, "full.mp4"), out, { src: [tl.viewport.w * dpr, tl.viewport.h * dpr], out: SIZE[aspect] ?? SIZE["16:9"], fps: FPS, boxes }, { python: py });
   // How this cut was made, so `rec look` can rebuild the camera path for it.
   writeFileSync(out.replace(/\.mp4$/, ".cut.json"), JSON.stringify({ file: name, aspect, cam: camSettings(tl, cam), size: SIZE[aspect] ?? SIZE["16:9"] }, null, 1));
   return out;
