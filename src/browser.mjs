@@ -47,6 +47,15 @@ export async function setRate(page, cdp, rate) {
 /** Always hidden in footage: the text caret. Apps add their own dev chrome via config `css`. */
 export const CLEAN_CSS = `*{caret-color:transparent}`;
 
+/** Real screenshots per second with the recorder's settings, measured over a few frames (no files written). */
+export async function captureFps(cdp, { clip, scale, quality = 93, n = 6 }) {
+  const shot = () => cdp.send("Page.captureScreenshot", { format: "jpeg", quality, optimizeForSpeed: true, clip: { ...clip, scale } });
+  await shot(); // the first is slower
+  const t0 = performance.now();
+  for (let i = 0; i < n; i++) await shot();
+  return (n * 1000) / (performance.now() - t0);
+}
+
 /**
  * Screenshot loop. Frames go to `dir` as they arrive; each is stamped with wall time. Call stop() to end.
  * clip is in CSS px (default: the whole viewport); scale is device px per CSS px. The explicit clip matters:
