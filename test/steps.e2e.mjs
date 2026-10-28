@@ -158,3 +158,15 @@ test("each unique target suggested for an ambiguous one resolves to exactly one 
   assert.ok(suggested.length >= 3, e?.message);
   for (const t of suggested) assert.equal(await toLocator(s.page, t).count(), 1, t);
 });
+
+test("frame container frames the card around a small target, past a small group, instead of the target itself", async () => {
+  await s.page.setContent(`<body style="margin:0"><section style="position:absolute;left:40px;top:60px;width:1200px;height:300px">
+    <div><div role="group" style="width:346px;height:40px"><button id="pill" style="width:95px;height:32px">Argon</button></div></div></section></body>`);
+  const d = new Director(s.page, 1, { x: 640, y: 400 });
+  const t0 = performance.now();
+  d.start({ now: () => performance.now() - t0 });
+  await runSteps([{ hover: "#pill" }, { hover: "#pill", frame: "container" }], { page: s.page, d, cfg: { url: URL_ } });
+  const [own, card] = d.events.map((e) => e.box);
+  assert.deepEqual([own.w, own.h], [95, 32]);
+  assert.deepEqual(card, { x: 40, y: 60, w: 1200, h: 300 });
+});
