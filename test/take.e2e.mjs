@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, readFileSync, statSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawnSync, spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
 const REC = join(import.meta.dirname, "..", "bin", "autocap.mjs");
@@ -33,6 +33,8 @@ function app(more = "") {
       } },
     { id: "card.missing", feature: "cards", title: "Clicks a button that does not exist", demonstrates: "x",
       async act({ page, d }) { await d.click(page.locator("#nope")); } },
+    { id: "card.long", feature: "cards", title: "A long recording", demonstrates: "x",
+      async act({ d }) { await d.wait(4000); } },
     { id: "card.boom", feature: "cards", title: "Fails mid-recording", demonstrates: "x",
       async act({ d }) { await d.wait(200); throw new Error("boom"); } },
   ],
@@ -125,4 +127,19 @@ test("extras focus and slowmo add those clips, and take says when slow-mo repeat
   const out = join(dir, "assets", "effects", "card.pop");
   for (const f of ["focus.mp4", "slowmo.mp4"]) assert.ok(statSync(join(out, f)).size > 1000, `${f} is empty`);
   if (res.fps < 180) assert.ok(res.warnings?.some((w) => /slowmo/.test(w)), JSON.stringify(res));
+});
+
+test("a take stopped with SIGTERM says which stage it was in and leaves no frames or lock behind", async () => {
+  const dir = app();
+  const p = spawn(process.execPath, [REC, "take", "card.long"], { cwd: dir, env: { ...process.env, REC_RATE: "0.2" } });
+  let out = "", err = "";
+  p.stdout.on("data", (d) => (out += d));
+  p.stderr.on("data", (d) => (err += d));
+  await new Promise((r) => { const t = setInterval(() => /recording/.test(out) && (clearInterval(t), setTimeout(r, 1500)), 100); });
+  p.kill("SIGTERM");
+  const code = await new Promise((r) => p.on("close", (c, sig) => r(c ?? sig)));
+  assert.equal(code, 143, out + err);
+  assert.match(err, /interrupted during capture of card\.long/);
+  assert.ok(!existsSync(join(dir, "assets", ".frames", "card.long")), "frames left behind");
+  assert.ok(!existsSync(join(dir, "assets", ".record.lock")), "lock left behind");
 });
