@@ -47,12 +47,20 @@ export async function setRate(page, cdp, rate) {
 /** Always hidden in footage: the text caret. Apps add their own dev chrome via config `css`. */
 export const CLEAN_CSS = `*{caret-color:transparent}`;
 
-/** Real screenshots per second with the recorder's settings, measured over a few frames (no files written). */
-export async function captureFps(cdp, { clip, scale, quality = 93, n = 6 }) {
+// Screenshots in flight at once. Chrome encodes them off its main thread, so two overlap: on bot18 at 2880x1800,
+// 7-8 frames per real second became 14-16, never out of order, with the same stamp jitter (~10-20 ms). A third
+// mostly returns repeats. Measured 2026-10-27.
+const INFLIGHT = 2;
+
+/** Real screenshots per second with the recorder's settings, over a few frames (no files written). Every shot counts,
+ * repeats included: the page is still while this runs, and the question is how fast frames can be taken. */
+export async function captureFps(cdp, { clip, scale, quality = 93, n = 8 }) {
   const shot = () => cdp.send("Page.captureScreenshot", { format: "jpeg", quality, optimizeForSpeed: true, clip: { ...clip, scale } });
   await shot(); // the first is slower
   const t0 = performance.now();
-  for (let i = 0; i < n; i++) await shot();
+  await Promise.all(Array.from({ length: INFLIGHT }, async () => {
+    for (let i = 0; i < n / INFLIGHT; i++) await shot();
+  }));
   return (n * 1000) / (performance.now() - t0);
 }
 
@@ -69,7 +77,8 @@ export function recorder(cdp, { dir, clip, scale, alpha = false, quality = 93 })
   const writes = [];
   let running = true, failed = null; // a failed write (disk full) stops the loop; stop() reports it
   const t0 = performance.now();
-  const loop = (async () => {
+  let last = null, shots = 0, lastWall = 0; // a repeat of the previous screenshot (nothing changed) is counted but not written
+  const worker = async () => {
     while (running && !failed) {
       const t = performance.now();
       const r = await cdp.send("Page.captureScreenshot", {
@@ -78,14 +87,22 @@ export function recorder(cdp, { dir, clip, scale, alpha = false, quality = 93 })
         optimizeForSpeed: true,
         clip: { ...clip, scale },
       });
+      shots++;
+      const wall = Math.max((t + performance.now()) / 2 - t0, lastWall + 0.01);
+      lastWall = wall;
+      if (r.data === last) continue;
+      last = r.data;
       const file = join(dir, `f${String(frames.length).padStart(5, "0")}.${alpha ? "png" : "jpg"}`);
       const buf = Buffer.from(r.data, "base64");
-      frames.push({ file, wall: (t + performance.now()) / 2 - t0, bytes: buf.length });
+      frames.push({ file, wall, bytes: buf.length });
       writes.push(writeFile(file, buf).catch((e) => { failed ??= e; }));
     }
-  })();
+  };
+  const loop = Promise.all(Array.from({ length: INFLIGHT }, worker));
   return {
     t0,
+    /** screenshots taken so far, repeats included: the capture rate, whatever the page did */
+    get shots() { return shots; },
     /** ms since start, wall clock */
     now: () => performance.now() - t0,
     async stop() {
@@ -93,6 +110,8 @@ export function recorder(cdp, { dir, clip, scale, alpha = false, quality = 93 })
       await loop;
       await Promise.all(writes);
       if (failed) throw new Error(`cannot write frames to ${dir}: ${failed.message}`);
+      // a still ending: the last frame holds until the last screenshot, so the clip keeps its full length
+      if (frames.length && lastWall > frames.at(-1).wall) frames.push({ ...frames.at(-1), wall: lastWall, bytes: 0 });
       return frames;
     },
   };
