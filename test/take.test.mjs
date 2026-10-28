@@ -8,6 +8,8 @@ import { spawnSync } from "node:child_process";
 import { recorder } from "../src/browser.mjs";
 
 const REC = join(import.meta.dirname, "..", "bin", "autocap.mjs");
+// What Page.getLayoutMetrics answers for an unscrolled 10x10 page (the recorder reads the scroll offset before each shot).
+const LAYOUT = { cssVisualViewport: { offsetX: 0, offsetY: 0, pageX: 0, pageY: 0, clientWidth: 10, clientHeight: 10, scale: 1, zoom: 1 } };
 
 test("take refuses to record without ffmpeg, before it launches Chrome", () => {
   const dir = mkdtempSync(join(tmpdir(), "rec-preflight-"));
@@ -23,7 +25,7 @@ test("take refuses to record without ffmpeg, before it launches Chrome", () => {
 
 test("a frame that can't be written ends the recording with a clear error instead of crashing", async () => {
   const dir = join(mkdtempSync(join(tmpdir(), "rec-frames-")), "frames");
-  const cdp = { send: () => new Promise((r) => setTimeout(() => r({ data: Buffer.from("jpeg").toString("base64") }), 5)) };
+  const cdp = { send: (m) => (m === "Page.getLayoutMetrics" ? Promise.resolve(LAYOUT) : new Promise((r) => setTimeout(() => r({ data: Buffer.from("jpeg").toString("base64") }), 5))) };
   const rec = recorder(cdp, { dir, clip: { x: 0, y: 0, width: 10, height: 10 }, scale: 1 });
   rmSync(dir, { recursive: true, force: true });
   writeFileSync(dir, "a file where the frames folder was"); // every later write fails with ENOTDIR
@@ -34,7 +36,8 @@ test("a frame that can't be written ends the recording with a clear error instea
 // A fake CDP whose screenshots take 20 ms and can overlap, like Chrome's (measured: 2 in flight doubles the rate).
 function fakeCdp({ ms = 20, same = () => false } = {}) {
   const state = { inflight: 0, max: 0, n: 0 };
-  const send = async () => {
+  const send = async (method) => {
+    if (method === "Page.getLayoutMetrics") return LAYOUT;
     state.max = Math.max(state.max, ++state.inflight);
     await new Promise((r) => setTimeout(r, ms));
     state.inflight--;

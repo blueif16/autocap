@@ -64,10 +64,17 @@ export async function open(page, url, timeout = 90000) {
   ]);
 }
 
+/** A viewport-relative clip in the document coordinates CDP's captureScreenshot uses. A fixed (0, 0) clip films the
+ * unrendered region above the viewport once the window scrolls (blank frames); reading the offset costs ~1 ms. */
+export async function inView(cdp, clip) {
+  const { cssVisualViewport: v } = await cdp.send("Page.getLayoutMetrics");
+  return { ...clip, x: clip.x + v.pageX, y: clip.y + v.pageY };
+}
+
 /** A PNG of the viewport (clip in CSS px) via CDP. Not page.screenshot: it waits for document.fonts.ready, which
  * waits for the load event, so it stalls on a page still fetching off-screen media. */
 export async function snapshot(cdp, path, clip) {
-  const r = await cdp.send("Page.captureScreenshot", { format: "png", clip: { ...clip, scale: 1 } });
+  const r = await cdp.send("Page.captureScreenshot", { format: "png", clip: { ...(await inView(cdp, clip)), scale: 1 } });
   writeFileSync(path, Buffer.from(r.data, "base64"));
 }
 
@@ -100,7 +107,7 @@ const INFLIGHT = 2;
 /** Real screenshots per second with the recorder's settings, over a few frames (no files written). Every shot counts,
  * repeats included: the page is still while this runs, and the question is how fast frames can be taken. */
 export async function captureFps(cdp, { clip, scale, quality = 93, n = 8 }) {
-  const shot = () => cdp.send("Page.captureScreenshot", { format: "jpeg", quality, optimizeForSpeed: true, clip: { ...clip, scale } });
+  const shot = async () => cdp.send("Page.captureScreenshot", { format: "jpeg", quality, optimizeForSpeed: true, clip: { ...(await inView(cdp, clip)), scale } });
   await shot(); // the first is slower
   const t0 = performance.now();
   await Promise.all(Array.from({ length: INFLIGHT }, async () => {
@@ -125,12 +132,13 @@ export function recorder(cdp, { dir, clip, scale, alpha = false, quality = 93 })
   let last = null, shots = 0, lastWall = 0; // a repeat of the previous screenshot (nothing changed) is counted but not written
   const worker = async () => {
     while (running && !failed) {
+      const at = await inView(cdp, clip);
       const t = performance.now();
       const r = await cdp.send("Page.captureScreenshot", {
         format: alpha ? "png" : "jpeg",
         ...(alpha ? {} : { quality }),
         optimizeForSpeed: true,
-        clip: { ...clip, scale },
+        clip: { ...at, scale },
       });
       shots++;
       const wall = Math.max((t + performance.now()) / 2 - t0, lastWall + 0.01);
