@@ -13,8 +13,35 @@ export class StepError extends Error {
   }
 }
 
+// Playwright's locator suggestions ("aka getByRole('button', { name: 'Go' })") in autocap's target syntax.
+const AKA = [
+  [/^getByRole\('([\w-]+)', \{ name: '((?:[^'\\]|\\.)*)' \}\)$/, (r, n) => `role=${r}[name="${n}"]`],
+  [/^getByRole\('([\w-]+)'\)$/, (r) => `role=${r}`],
+  [/^getByText\('((?:[^'\\]|\\.)*)', \{ exact: true \}\)$/, (t) => `text="${t}"`],
+  [/^getByText\('((?:[^'\\]|\\.)*)'\)$/, (t) => `text=${t}`],
+  [/^getByTestId\('((?:[^'\\]|\\.)*)'\)$/, (t) => `testid=${t}`],
+  [/^getByLabel\('((?:[^'\\]|\\.)*)'\)$/, (t) => `label=${t}`],
+  [/^getByPlaceholder\('((?:[^'\\]|\\.)*)'\)$/, (t) => `placeholder=${t}`],
+  [/^getByAltText\('((?:[^'\\]|\\.)*)'\)$/, (t) => `alt=${t}`],
+  [/^getByTitle\('((?:[^'\\]|\\.)*)'\)$/, (t) => `title=${t}`],
+  [/^locator\('((?:[^'\\]|\\.)*)'\)$/, (c) => `css=${c}`],
+];
+const unescape = (s) => s.replace(/\\(.)/g, "$1");
+const asTarget = (aka) => {
+  for (const [re, to] of AKA) {
+    const m = aka.match(re);
+    if (m) return to(...m.slice(1).map(unescape));
+  }
+  return null;
+};
+
 function hint(msg) {
-  if (/strict mode violation/.test(msg)) return ` · the target matches several elements: make it more specific, or append " >> nth=0"`;
+  if (/strict mode violation/.test(msg)) {
+    const unique = [...msg.matchAll(/^\s+\d+\) .* aka (.+)$/gm)].map((m) => asTarget(m[1].trim())).filter(Boolean);
+    const n = msg.match(/resolved to (\d+) elements/)?.[1];
+    if (unique.length) return ` · it matches ${n ?? "several"} elements; unique targets: ${unique.slice(0, 5).join(" · ")}${unique.length > 5 ? " …" : ""}`;
+    return ` · the target matches several elements: make it more specific, or append " >> nth=0"`;
+  }
   if (/Timeout .*exceeded/.test(msg)) return " · not found or not visible: check the target against the page, or add optional: true if it may be absent";
   return "";
 }

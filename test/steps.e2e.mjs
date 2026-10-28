@@ -8,6 +8,7 @@ import { launch } from "../src/browser.mjs";
 import { installStage } from "../src/stage.mjs";
 import { Director } from "../src/director.mjs";
 import { runSteps, validateSteps } from "../src/steps.mjs";
+import { toLocator } from "../src/target.mjs";
 
 const URL_ = pathToFileURL(join(import.meta.dirname, "fixtures", "steps.html")).href;
 let s;
@@ -145,4 +146,15 @@ test("validation accepts every verb with its documented options", () => {
     { scroll: 200, in: "#list" }, { drag: "#a", to: "#b" }, { select: "#s", value: "v" }, { wait: 100 }, { see: "#a", timeout: 3000 },
     { emit: "/s", event: "e", data: {} }, { run: () => {} }, { click: "#a", beat: "b", cam: "follow", say: "x", ms: 300, optional: true, region: { x: 0, y: 0, w: 10, h: 10 } },
   ]);
+});
+
+test("each unique target suggested for an ambiguous one resolves to exactly one element", async () => {
+  await s.page.setContent(`<h1>Argon wins</h1><button>Argon</button><span title="x">Argon</span><div data-testid="card">Argon card</div><a href="#">More Argon</a><label>Argon <input></label>`);
+  const d = new Director(s.page, 1, { x: 640, y: 400 });
+  const t0 = performance.now();
+  d.start({ now: () => performance.now() - t0 });
+  const e = await runSteps([{ click: "text=Argon" }], { page: s.page, d, cfg: { url: URL_ } }).then(() => null, (e) => e);
+  const suggested = e?.message.match(/unique targets: (.*?)( …)?$/)?.[1].split(" · ") ?? [];
+  assert.ok(suggested.length >= 3, e?.message);
+  for (const t of suggested) assert.equal(await toLocator(s.page, t).count(), 1, t);
 });

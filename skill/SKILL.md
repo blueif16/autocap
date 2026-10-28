@@ -36,8 +36,8 @@ The default camera zooms on each step's target. For anything else (beats only, s
 region) run `rec guide cam`: it maps what you want to what you write.
 
 ## Rules
-- **One target, one element.** If `check` reports several matches, make the target specific (`role=`, exact
-  `text="…"`) or scope it with `A >> B`; ` >> nth=0` is the last resort.
+- **One target, one element.** If a target matches several elements, `check` lists unique targets for them; use
+  the one you meant. ` >> nth=0` is the last resort.
 - **Never use pixel boxes for targets.** `region` is for framing only.
 - **Stage live data.** AI replies, prices and live feeds must not depend on a live backend during a take:
   `stage.streams` with `emit` steps fakes an EventSource, `stage.rules` answers fetches, `stage.block` stops writes.
