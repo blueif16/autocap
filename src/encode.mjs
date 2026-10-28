@@ -2,14 +2,17 @@
 import { writeFileSync, rmSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 
+/** A path quoted for an ffconcat `file` line: inside single quotes, a ' is written '\''. */
+const quote = (p) => `'${p.replaceAll("'", "'\\''")}'`;
+
 /** Writes an ffmpeg concat list where each frame lasts its page-time duration × stretch. */
 function concatList(frames, rate, stretch, listPath) {
   let s = "";
   frames.forEach((f, i) => {
     const next = frames[i + 1]?.wall ?? f.wall + 1000 / 30;
-    s += `file '${f.file}'\nduration ${(((next - f.wall) * rate * stretch) / 1000).toFixed(6)}\n`;
+    s += `file ${quote(f.file)}\nduration ${(((next - f.wall) * rate * stretch) / 1000).toFixed(6)}\n`;
   });
-  s += `file '${frames[frames.length - 1].file}'\n`;
+  s += `file ${quote(frames[frames.length - 1].file)}\n`;
   writeFileSync(listPath, s);
 }
 

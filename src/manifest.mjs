@@ -4,6 +4,13 @@
 import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, renameSync } from "node:fs";
 import { join } from "node:path";
 
+/** Write via a temp file and rename, so a kill mid-write never leaves half a JSON file. */
+function writeAtomic(path, text) {
+  const tmp = `${path}.${process.pid}.tmp`;
+  writeFileSync(tmp, text);
+  renameSync(tmp, path);
+}
+
 /** Path relative to the output folder, as stored in the manifest. */
 export const rel = (out, p) => p.replace(out + "/", "");
 
@@ -13,7 +20,7 @@ export function addToManifest(out, entry, features = null) {
   if (features && !features[entry.feature]) throw new Error(`manifest entry ${entry.id}: unknown feature ${entry.feature}`);
   const dir = join(out, ".manifest");
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, `${entry.id}.json`), JSON.stringify(entry, null, 2));
+  writeAtomic(join(dir, `${entry.id}.json`), JSON.stringify(entry, null, 2));
   rebuildManifest(out, features);
 }
 
@@ -22,7 +29,7 @@ export function patchManifest(out, id, patch, features = null) {
   const f = join(out, ".manifest", `${id}.json`);
   if (!existsSync(f)) return;
   const e = JSON.parse(readFileSync(f, "utf8"));
-  writeFileSync(f, JSON.stringify({ ...e, ...patch, files: { ...e.files, ...(patch.files ?? {}) } }, null, 2));
+  writeAtomic(f, JSON.stringify({ ...e, ...patch, files: { ...e.files, ...(patch.files ?? {}) } }, null, 2));
   rebuildManifest(out, features);
 }
 
@@ -32,10 +39,14 @@ export function rebuildManifest(out, features = null) {
   const path = join(out, "manifest.json");
   const assets = {};
   for (const f of readdirSync(dir).filter((f) => f.endsWith(".json")).sort()) {
-    const e = JSON.parse(readFileSync(join(dir, f), "utf8"));
+    let e;
+    try {
+      e = JSON.parse(readFileSync(join(dir, f), "utf8"));
+    } catch (err) {
+      console.error(`  skipping damaged manifest entry ${join(dir, f)} (${err.message}); re-take that shot to restore it`);
+      continue;
+    }
     assets[e.id] = e;
   }
-  const tmp = `${path}.${process.pid}.tmp`;
-  writeFileSync(tmp, JSON.stringify({ generated: new Date().toISOString(), features: features ?? {}, assets }, null, 2));
-  renameSync(tmp, path);
+  writeAtomic(path, JSON.stringify({ generated: new Date().toISOString(), features: features ?? {}, assets }, null, 2));
 }

@@ -142,3 +142,11 @@ test("--json output larger than a pipe buffer arrives whole", () => {
   assert.equal(r.status, 0, r.stderr);
   assert.equal(JSON.parse(r.stdout).shots.length, 3000);
 });
+
+test("a shot id that could escape the output folder is rejected with exit 3", () => {
+  for (const id of ["..", "a/b", ".hidden"]) {
+    const r = rec(app(TWO_SHOTS.replace('"menu.close"', JSON.stringify(id))), "ls");
+    assert.equal(r.status, 3, `${id}: ${r.stderr}`);
+    assert.match(r.stderr, /shot id/);
+  }
+});

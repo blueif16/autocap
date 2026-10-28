@@ -4,7 +4,8 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawnSync, execFile } from "node:child_process";
+import { createServer } from "node:http";
 
 const REC = join(import.meta.dirname, "..", "bin", "autocap.mjs");
 // No test here asserts on Chrome, so a stub keeps doctor from launching it: these run in the fast suite.
@@ -72,4 +73,16 @@ test("a lock held by a dead pid is stale and ok; one held by a live pid warns", 
   assert.equal(live.ok, false);
   assert.equal(live.level, "warn");
   assert.match(live.detail, new RegExp(`pid ${process.pid}`));
+});
+
+test("an app that answers 500 fails the app check", async () => {
+  const server = createServer((_, res) => { res.statusCode = 500; res.end("boom"); });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const dir = app(`http://127.0.0.1:${server.address().port}/`);
+  // execFile, not spawnSync: the server in this process must keep answering while doctor runs.
+  const stdout = await new Promise((r) => execFile(process.execPath, [REC, "doctor", "--json"], { cwd: dir, env: NO_CHROME }, (_, out) => r(out)));
+  server.close();
+  const a = JSON.parse(stdout).checks.find((c) => c.name === "app");
+  assert.equal(a.ok, false, a.detail);
+  assert.match(a.detail, /500/);
 });

@@ -73,6 +73,7 @@ async function checkApp(cfg) {
   }
   try {
     const res = await fetch(cfg.url, { signal: AbortSignal.timeout(5000) });
+    if (res.status >= 500) return bad("app", "fail", `${cfg.url} answered ${res.status} (a server error)`, `fix the app so ${cfg.url} loads, then re-run doctor`);
     return ok("app", `${cfg.url} answered ${res.status}`);
   } catch (e) {
     return bad("app", "fail", `${cfg.url} did not answer within 5 s (${e.cause?.code ?? e.name})`, fix);
