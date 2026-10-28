@@ -240,6 +240,8 @@ export async function renderBoxes(src, out, cam) {
     "-c:v", "libx264", "-preset", "medium", "-crf", "15", "-pix_fmt", "yuv420p", "-movflags", "+faststart", out], { stdio: ["pipe", "ignore", "pipe"] });
   const done = Promise.all([exited(dec, err), exited(enc, err)]);
   enc.stdin.on("error", () => {}); // an encoder that died is reported by its exit code below
+  let encGone = false; // a dead encoder never drains: stop feeding it instead of waiting forever
+  const gone = new Promise((r) => enc.once("close", () => r((encGone = true))));
   const row = OW * 3;
   let n = 0;
   try {
@@ -253,7 +255,8 @@ export async function renderBoxes(src, out, cam) {
       if (info.width < OW || info.height < OH) throw new Error(`renderer: ${info.width}x${info.height} is smaller than ${OW}x${OH}`);
       const img = Buffer.allocUnsafe(OH * row); // its own buffer: the pipe may still hold the previous frame
       for (let r = 0; r < OH; r++) data.copy(img, r * row, r * info.width * 3, r * info.width * 3 + row); // top-left OW×OH
-      if (!enc.stdin.write(img)) await new Promise((r) => enc.stdin.once("drain", r));
+      if (!enc.stdin.write(img)) await Promise.race([new Promise((r) => enc.stdin.once("drain", r)), gone]);
+      if (encGone) break;
       n++;
     }
   } catch (e) {
@@ -261,6 +264,7 @@ export async function renderBoxes(src, out, cam) {
     rmSync(out, { force: true });
     throw e;
   }
+  if (encGone) dec.kill();
   enc.stdin.end();
   const [d, e] = await done;
   // A missing or cut-short source (e.g. the disk filled while encoding full.mp4) must fail, not leave a short clip.
