@@ -182,9 +182,11 @@ async function captureIn(shot, cfg, { page, cdp, browser }, rate, check, t0) {
   last = performance.now(); // the focus callback and closing Chrome belong to no stage
   encodeMp4(frames, join(out, "full.mp4"), { rate });
   lap("full");
-  encodeMp4(frames, join(out, "focus.mp4"), { rate, crop });
+  const extra = (name) => cfg.extras.includes(name);
+  for (const f of ["focus.mp4", "slowmo.mp4"]) rmSync(join(out, f), { force: true }); // no stale extras from an older take
+  if (extra("focus")) encodeMp4(frames, join(out, "focus.mp4"), { rate, crop });
   lap("focus");
-  encodeMp4(frames, join(out, "slowmo.mp4"), { rate, crop, stretch: SLOW });
+  if (extra("slowmo")) encodeMp4(frames, join(out, "slowmo.mp4"), { rate, crop, stretch: SLOW });
   lap("slowmo");
   const payoff = shot.posterAtMs ?? (d.marks.at(-1)?.atMs ?? durationMs * 0.6) + 500;
   const pf = frames.reduce((best, f) => (Math.abs(f.wall * rate - payoff) < Math.abs(best.wall * rate - payoff) ? f : best), frames[0]);
@@ -202,7 +204,7 @@ async function captureIn(shot, cfg, { page, cdp, browser }, rate, check, t0) {
   const frameMB = Math.round(frames.reduce((a, f) => a + f.bytes, 0) / 1e5) / 10;
 
   const capturedFps = Math.round(frames.length / (durationMs / 1000));
-  const warnings = capturedFps < 60 * SLOW ? [`slowmo.mp4 repeats frames: ${capturedFps} fps of page time, ${60 * SLOW} needed for ${SLOW}x (REC_RATE=${(rate * capturedFps / (60 * SLOW)).toFixed(3)} gives that)`] : [];
+  const warnings = extra("slowmo") && capturedFps < 60 * SLOW ? [`slowmo.mp4 repeats frames: ${capturedFps} fps of page time, ${60 * SLOW} needed for ${SLOW}x (REC_RATE=${(rate * capturedFps / (60 * SLOW)).toFixed(3)} gives that)`] : [];
   const r = (p) => rel(cfg.out, p);
   addToManifest(cfg.out, {
     id: `effect.${shot.id}`,
@@ -212,13 +214,13 @@ async function captureIn(shot, cfg, { page, cdp, browser }, rate, check, t0) {
     demonstrates: shot.demonstrates,
     suggestedUse: shot.suggestedUse,
     moments: d.marks.map(({ atMs, what }) => ({ atMs, what })),
-    files: { smart: r(join(out, "smart.mp4")), full: r(join(out, "full.mp4")), focus: r(join(out, "focus.mp4")), slowmo: r(join(out, "slowmo.mp4")), poster: r(join(out, "poster.png")), timeline: r(join(out, "timeline.json")), ...(captions ? { captions: r(join(out, "captions.srt")) } : {}) },
+    files: { smart: r(join(out, "smart.mp4")), full: r(join(out, "full.mp4")), ...(extra("focus") ? { focus: r(join(out, "focus.mp4")) } : {}), ...(extra("slowmo") ? { slowmo: r(join(out, "slowmo.mp4")) } : {}), poster: r(join(out, "poster.png")), timeline: r(join(out, "timeline.json")), ...(captions ? { captions: r(join(out, "captions.srt")) } : {}) },
     size: { full: [W * DPR, H * DPR], focus: [crop.w, crop.h] },
     focusBoxCss: focus,
     fps: 60,
     capturedFps,
     durationMs,
-    slowmoFactor: SLOW,
+    ...(extra("slowmo") ? { slowmoFactor: SLOW } : {}),
     cursor: stage.cursor,
     staged: shot.staged ?? null,
     alpha: false,

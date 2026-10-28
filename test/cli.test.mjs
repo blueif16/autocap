@@ -150,3 +150,9 @@ test("a shot id that could escape the output folder is rejected with exit 3", ()
     assert.match(r.stderr, /shot id/);
   }
 });
+
+test("an unknown extra is rejected with exit 3 and the valid ones", () => {
+  const r = rec(app(TWO_SHOTS.replace('url: "http://localhost:1",', 'url: "http://localhost:1", extras: ["gif"],')), "ls");
+  assert.equal(r.status, 3);
+  assert.match(r.stderr, /extras.*focus, slowmo/);
+});
