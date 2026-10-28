@@ -26,6 +26,25 @@ const DILATE = `(() => {
   window.setInterval = (f, ms = 0, ...a) => si(f, ms / rate, ...a);
 })();`;
 
+// Ready to film: fonts loaded and every image and video inside the viewport showing. Not the load event, which also
+// waits for off-screen media: bot18 is fully drawn at 1.1 s and fires load at 7.9 s, after 8 preloaded clips.
+// An image that hasn't loaded has no size yet, so position decides, not size.
+const SHOWING = () => document.fonts.status === "loaded" && [...document.images, ...document.querySelectorAll("video")].every((el) => {
+  if (!el.getClientRects().length) return true; // display: none
+  const r = el.getBoundingClientRect();
+  if (r.bottom < 0 || r.right < 0 || r.top > innerHeight || r.left > innerWidth) return true; // off-screen
+  return el.tagName === "VIDEO" ? el.readyState >= 2 : el.complete;
+});
+
+/** Opens `url` and resolves once what's in the viewport has loaded, or at the load event, whichever is first. */
+export async function open(page, url, timeout = 90000) {
+  await page.goto(url, { waitUntil: "domcontentloaded", timeout });
+  await Promise.race([
+    page.waitForLoadState("load", { timeout }),
+    page.waitForFunction(SHOWING, null, { polling: 100, timeout }),
+  ]);
+}
+
 /** A PNG of the viewport (clip in CSS px) via CDP. Not page.screenshot: it waits for document.fonts.ready, which
  * waits for the load event, so it stalls on a page still fetching off-screen media. */
 export async function snapshot(cdp, path, clip) {

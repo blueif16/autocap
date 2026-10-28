@@ -8,7 +8,7 @@
 // and an entry in <out>/manifest.json saying what it shows and why (feature, demonstrates, moments).
 import { mkdirSync, writeFileSync, rmSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { launch, snapshot, setRate, recorder, captureFps, CLEAN_CSS } from "./browser.mjs";
+import { launch, open, snapshot, setRate, recorder, captureFps, CLEAN_CSS } from "./browser.mjs";
 import { encodeMp4, poster } from "./encode.mjs";
 import { installStage } from "./stage.mjs";
 import { Director } from "./director.mjs";
@@ -134,7 +134,7 @@ async function captureIn(shot, cfg, { page, cdp, browser }, rate, check, t0) {
   progress.stage = "page load";
   await cfg.prepare?.({ page, shot });
   if (shot.routes) await shot.routes(page);
-  await page.goto(shot.path ? new URL(shot.path, cfg.url).href : cfg.url, { waitUntil: "load", timeout: 90000 }); // a dev server may be compiling
+  await open(page, shot.path ? new URL(shot.path, cfg.url).href : cfg.url); // up to 90 s: a dev server may be compiling
   await page.waitForTimeout(1500);
   const start = { x: Math.round(W * 0.903), y: Math.round(H * 0.911) };
   progress.stage = "setup";
