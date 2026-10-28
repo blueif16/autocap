@@ -6,13 +6,35 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-// One virtual clock for performance.now, Date.now / new Date(), rAF timestamps and timer delays. CSS and WAAPI animations
+// One virtual clock for performance.now, Date.now / new Date(), rAF timestamps and timers. CSS and WAAPI animations
 // are slowed separately through CDP (Animation.setPlaybackRate), by the same factor.
+// Timers keep their due time on the virtual clock and are re-armed whenever the rate changes, so a timer armed before
+// a take slows the page still fires at its page time. The rate is kept in sessionStorage, so a page that reloads
+// during a take comes back at the take's rate. (bot18 arms a 30 s auto-reload at load: with real-time delays it fired
+// mid-take at 11 s of page time and the reloaded page ran at full speed: blank frames.)
 const DILATE = `(() => {
   const rn = performance.now.bind(performance), rd = Date.now;
-  let rate = 1, w0 = rn(), v0 = w0; const d0 = rd() - w0;
+  let rate = 1;
+  try { rate = Number(sessionStorage.getItem("__recRate")) || 1; } catch {}
+  let w0 = rn(), v0 = w0; const d0 = rd() - w0;
   const vnow = () => v0 + (rn() - w0) * rate;
-  window.__setRate = r => { v0 = vnow(); w0 = rn(); rate = r; };
+  const st = window.setTimeout.bind(window), ct = window.clearTimeout.bind(window);
+  const timers = new Map(); let ids = 0;
+  const arm = (id, t) => { t.real = st(() => fire(id), Math.max(0, (t.due - vnow()) / rate)); };
+  const fire = (id) => {
+    const t = timers.get(id); if (!t) return;
+    if (t.every) { t.due += t.every; arm(id, t); } else timers.delete(id);
+    typeof t.f === "function" ? t.f.apply(window, t.a) : (0, eval)(String(t.f));
+  };
+  const add = (f, ms, a, every) => { const id = ++ids, t = { f, a, due: vnow() + (Number(ms) || 0), every }; timers.set(id, t); arm(id, t); return id; };
+  window.setTimeout = (f, ms = 0, ...a) => add(f, ms, a, 0);
+  window.setInterval = (f, ms = 0, ...a) => add(f, ms, a, Math.max(1, Number(ms) || 0));
+  window.clearTimeout = window.clearInterval = (id) => { const t = timers.get(id); if (t) { ct(t.real); timers.delete(id); } };
+  window.__setRate = r => {
+    v0 = vnow(); w0 = rn(); rate = r;
+    try { sessionStorage.setItem("__recRate", String(r)); } catch {}
+    for (const [id, t] of timers) { ct(t.real); arm(id, t); }
+  };
   window.__vnow = vnow;
   const RD = Date, now = () => Math.round(d0 + vnow());
   performance.now = vnow; RD.now = now;
@@ -21,9 +43,6 @@ const DILATE = `(() => {
   window.Date = D;
   const raf = window.requestAnimationFrame.bind(window);
   window.requestAnimationFrame = cb => raf(() => cb(vnow()));
-  const st = window.setTimeout.bind(window), si = window.setInterval.bind(window);
-  window.setTimeout = (f, ms = 0, ...a) => st(f, ms / rate, ...a);
-  window.setInterval = (f, ms = 0, ...a) => si(f, ms / rate, ...a);
 })();`;
 
 // Ready to film: fonts loaded and every image and video inside the viewport showing. Not the load event, which also
