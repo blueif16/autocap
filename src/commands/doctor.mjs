@@ -47,16 +47,13 @@ function checkFfmpeg() {
   return ok("ffmpeg", "libx264, libvpx-vp9" + (OS === "darwin" ? ", hevc_videotoolbox" : ""));
 }
 
-function checkRenderer(cfg) {
-  const explicit = cfg instanceof Error ? null : cfg?.python;
-  let py;
-  if (explicit) py = [explicit];
-  else if (process.env.REC_PYTHON) py = [process.env.REC_PYTHON];
-  else if (sh("uv", ["--version"]).status === 0) py = ["uv", "run", "--no-project", "--quiet", "--with", "pillow", "python"];
-  else py = ["python3"];
-  const r = sh(py[0], [...py.slice(1), "-c", "import PIL; print(PIL.__version__)"], 120000);
-  if (r.status === 0) return ok("renderer", `${py.join(" ")} (Pillow ${r.stdout.trim()})`);
-  return bad("renderer", "fail", `\`${py.join(" ")}\` cannot import PIL${r.error ? `: ${r.error.message}` : ""}`, "install uv (`brew install uv` or `pip install uv`), or `pip install pillow`, or set `python` in rec.config.mjs / REC_PYTHON to an interpreter with Pillow");
+async function checkRenderer() {
+  try {
+    const { default: sharp } = await import("sharp");
+    return ok("renderer", `sharp ${sharp.versions.sharp} (libvips ${sharp.versions.vips})`);
+  } catch (e) {
+    return bad("renderer", "fail", `sharp does not load: ${e.message.split("\n")[0]}`, "reinstall autocap's dependencies (`npm i`); sharp ships prebuilt binaries, see https://sharp.pixelplumbing.com/install");
+  }
 }
 
 function checkConfig(cfg) {
@@ -134,8 +131,8 @@ function checkLock(out) {
 }
 
 /** What take needs before it records; any of these failing would waste the whole recording. Throws exit 2 with the fix. */
-export function preflight(cfg) {
-  for (const c of [checkFfmpeg(), checkRenderer(cfg), checkDisk(cfg.out)]) {
+export async function preflight(cfg) {
+  for (const c of [checkFfmpeg(), await checkRenderer(), checkDisk(cfg.out)]) {
     if (!c.ok && c.level === "fail") throw new RecError(2, `${c.name}: ${c.detail}`, c.fix);
   }
 }
@@ -143,7 +140,7 @@ export function preflight(cfg) {
 export async function run({ cfg, flags }) {
   const loaded = cfg && !(cfg instanceof Error);
   const results = await Promise.all([
-    checkNode(), checkChrome(cfg), checkFfmpeg(), checkRenderer(cfg), checkConfig(cfg),
+    checkNode(), checkChrome(cfg), checkFfmpeg(), checkRenderer(), checkConfig(cfg),
     loaded ? checkApp(cfg) : null,
   ]);
   const out = loaded ? cfg.out : join(process.cwd(), "rec-assets");

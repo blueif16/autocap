@@ -14,8 +14,7 @@ agent. There is no MCP server: it is a CLI plus one skill. The CLI answers to `a
 
 ## For coding agents: start here
 
-1. Install in the project root: `npm i -D github:blueif16/autocap` (needs Google Chrome, ffmpeg, and uv or a Python
-   with Pillow).
+1. Install in the project root: `npm i -D github:blueif16/autocap` (needs Google Chrome and ffmpeg).
 2. Run `npx rec skill` and follow it. It is the whole procedure, from reading the app to the done bar and the report.
    `npx rec skill --install` keeps it for future sessions.
 3. `npx rec guide` lists the vocabulary by topic; `npx rec <command> --help` shows one command.

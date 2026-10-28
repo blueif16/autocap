@@ -36,7 +36,7 @@ export async function run({ cfg, args, flags }) {
       const aspect = AS[f] ?? "16:9";
       const name = nameOf(aspect, flags.cam);
       const mp4 = join(dir, name);
-      if (!files[name.replace(".mp4", "")]) render(dir, { python: cfg.python, aspect, cam, name });
+      if (!files[name.replace(".mp4", "")]) await render(dir, { aspect, cam, name });
       files[name.replace(".mp4", "")] = rel(cfg.out, mp4);
       if (f === "gif") {
         const g = mp4.replace(/\.mp4$/, ".gif");
