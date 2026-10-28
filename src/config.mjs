@@ -40,6 +40,8 @@ export async function loadConfig(file) {
   const seen = new Set();
   for (const s of shots) {
     if (!s.id) throw new RecError(3, `a shot has no id (${s.title ?? "untitled"})`);
+    // The id names folders under <out>: ".." would make a take wipe the output folder.
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(s.id)) throw new RecError(3, `shot id "${s.id}": use letters, digits, ".", "_" and "-", starting with a letter or digit`);
     if (seen.has(s.id)) throw new RecError(3, `duplicate shot id ${s.id}`);
     seen.add(s.id);
     if (!s.title) throw new RecError(3, `shot ${s.id} is missing title`);
